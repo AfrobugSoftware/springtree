@@ -92,6 +92,7 @@ Thumbs.db
 sqlite3.exe
 build-debug/
 build-release/
+build/
 release/
 thirdparty/
 base/thridparty/

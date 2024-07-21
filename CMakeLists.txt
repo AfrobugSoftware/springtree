@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(pof VERSION 0.1 LANGUAGES CXX)
+project(springtree VERSION 0.1 LANGUAGES CXX)
 
 #setup complier
 set(CMAKE_CXX_STANDARD  20)
@@ -26,8 +26,8 @@ find_package(date REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
 
-file(GLOB incs ${PROJECT_SOURCE_DIR}/include/*.h ${PROJECT_SOURCE_DIR}/include/controls/*.h)
-file(GLOB srcs ${PROJECT_SOURCE_DIR}/src/*.cpp ${PROJECT_SOURCE_DIR}/src/controls/*.cpp)
+file(GLOB incs ${PROJECT_SOURCE_DIR}/include/*.hpp)
+file(GLOB srcs ${PROJECT_SOURCE_DIR}/src/*.cpp)
 
 if(CMAKE_SYSTEM MATCHES Windows)
     set(APP WIN32)
@@ -43,7 +43,6 @@ if(MSVC)
 endif()
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/base)
-add_subdirectory(${PROJECT_SOURCE_DIR}/formulary)
 
 set(wxWidgets_include_dir ${wxWidgets_root_dir}/include)
 set(wxWidgets_libraries_dir ${wxWidgets_root_dir}/lib/vc_x64_dll)
