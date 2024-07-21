@@ -1,0 +1,24 @@
+[options]
+pgk/boost:shared=True
+
+
+[requires]
+boost/1.83.0
+fmt/10.0.0
+spdlog/1.11.0
+zlib/1.2.13
+openssl/3.0.7
+nlohmann_json/3.11.2
+sqlite3/3.40.1
+lz4/1.9.4
+date/3.0.1
+crowcpp-crow/1.1.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[imports]
+bin, *.dll -> ./bin # Copies all dll files from packages bin folder to my "bin" folder
+lib, *.dylib* -> ./bin # Copies all dylib files from packages lib folder to my "bin" folder
+lib, *.so* -> ./bin # Copies all so files from packages lib folder to my "bin" folder
