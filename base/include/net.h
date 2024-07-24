@@ -53,6 +53,7 @@
 #include <shared_mutex>
 #include <future>
 #include <type_traits>
+#include <atomic>
 #include <utility>
 
 #include "taskmanager.h"
@@ -81,7 +82,7 @@ namespace this_coro = net::this_coro;
 
 using namespace std::literals::chrono_literals;
 using namespace std::literals::string_literals;
-#define USER_AGENT_STRING "grapejuice"
+#define PHARMAOFFICE_USER_AGENT_STRING "pharmaoffice_1"
 
 namespace pof {
 	namespace base {
@@ -97,10 +98,12 @@ namespace pof {
 			static_assert(std::conjunction_v<http::is_body<response_body>, http::is_body<request_body>>,
 				"response body or request body is not supported by the session class");
 
-			typedef http::request<request_body> request_type;
+			typedef http::request<request_body>   request_type;
 			typedef http::response<response_body> response_type;
-			typedef std::promise<typename response_body::value_type> promise_t;
-			typedef std::future<typename response_body::value_type> future_t;
+			typedef std::promise<response_type>   promise_t;
+			typedef std::future<response_type>    future_t;
+			static boost::asio::ip::tcp::endpoint m_globalendpoint;
+			std::atomic<bool> m_connected;
 
 			explicit session(net::io_context& ioc) : m_resolver(net::make_strand(ioc)),
 				m_stream(net::make_strand(ioc))
@@ -108,25 +111,11 @@ namespace pof {
 				//set the maximum size of the read flat_buffer, to avoid buffer overflow
 				//catch buffer_overflow errors when this maximum is exceeeded, 
 				//but how do i know the maximum buffer size for both the input sequence and the output sequence
-			}
-			session(session&& rhs)
-			{
-				m_resolver = std::move(rhs.m_resolver);
-				m_stream = std::move(rhs.m_stream);
-				m_buffer = std::move(rhs.m_buffer);
-				m_req = std::move(rhs.m_req);
-				m_res = std::move(rhs.m_res);
-				m_promise = std::move(rhs.m_promise);
+				m_connected.store(false);
 			}
 
-			session& operator=(session&& rhs) {
-				m_resolver = std::move(rhs.m_resolver);
-				m_stream = std::move(rhs.m_stream);
-				m_buffer = std::move(rhs.m_buffer);
-				m_req = std::move(rhs.m_req);
-				m_res = std::move(rhs.m_res);
-				m_promise = std::move(rhs.m_promise);
-			}
+			session(session&& rhs) = delete;
+			session& operator=(session&& rhs) = delete;
 
 
 			//the copy constructor and the copy assignment is deleted, to prevent copying
@@ -137,17 +126,28 @@ namespace pof {
 
 
 			template<http::verb verb>
-			future_t req(const std::string& host,
+			future_t req(
 				const std::string& target,
-				const std::string& port,
-				typename request_type::body_type const& body = http::empty_body{},
-				 std::chrono::steady_clock::duration = 60s) {
-				prepare_request(target, host, verb, body, 11);
-				m_resolver.async_resolve(host,
-					port,
-					beast::bind_front_handler(
-						&session::on_resolve,
-						this->shared_from_this()));
+				typename request_type::body_type::value_type&& body,
+				const std::string& host = "",
+				const std::string& port = "",
+				std::chrono::steady_clock::duration = 60s
+			) {
+				prepare_request(target, host, verb, std::forward<typename request_type::body_type::value_type>(body), 11);
+				if (!host.empty() && !port.empty()){
+					m_resolver.async_resolve(host, port, std::bind_front(&session::on_resolve, this->shared_from_this()));
+				}
+				else {
+					if (m_connected.load()) {
+						m_stream.async_connect(m_globalendpoint, beast::bind_front_handler(&session::on_connect, this->shared_from_this()));
+					}
+					else {
+						// Send the HTTP request to the remote host
+						http::async_write(m_stream,
+							m_req, beast::bind_front_handler(&session::on_write,
+								this->shared_from_this()));
+					}
+				}
 				return (m_promise.get_future());
 			}
 
@@ -170,12 +170,13 @@ namespace pof {
 						&session::on_connect,
 						this->shared_from_this()));
 			}
-			void on_connect(beast::error_code ec, tcp::resolver::results_type::endpoint_type endpoint) {
+			void on_connect(const beast::error_code& ec) {
 				if (ec)
 					return on_fail(ec);
 
 				// Set a timeout on the operation
 				m_stream.expires_after(std::chrono::seconds(60));
+				m_connected.store(true);
 
 				// Send the HTTP request to the remote host
 				http::async_write(m_stream,
@@ -199,10 +200,6 @@ namespace pof {
 
 			void on_read(beast::error_code ec, size_t bytes) {
 				boost::ignore_unused(bytes);
-
-				if (ec)
-					return on_fail(ec);
-
 				// Gracefully close the socket
 				m_stream.socket().shutdown(tcp::socket::shutdown_both, ec);
 
@@ -211,13 +208,17 @@ namespace pof {
 					return on_fail(ec);
 
 				//push the result of the respone to the 
-				m_promise.set_value(m_res.body());
+				m_promise.set_value(std::move(m_res));
 
 			}
 
 			void on_fail(beast::error_code ec) {
 				//causes the future end of the communication channel to throw an exception
 				try {
+					if (ec == boost::asio::error::not_connected || ec == boost::asio::error::connection_aborted ||
+						ec == boost::asio::error::connection_reset || ec == boost::asio::error::connection_refused) {
+						m_connected.load(false);
+					}
 					//throw 
 					throw std::system_error(std::error_code(ec));
 				}
@@ -235,30 +236,30 @@ namespace pof {
 			void prepare_request(const std::string& target,
 				const std::string& host,
 				http::verb verb,
-				typename request_type::body_type const& body,
+				typename request_type::body_type::value_type&& body,
 				int version = 11
 			)
 			{
-				if constexpr (std::is_same_v<request_body, http::string_body>) {
+				if constexpr (std::disjunction_v<std::is_same<request_body, http::string_body>, 
+					 std::is_same<request_body, http::vector_body<std::uint8_t>>>) {
 					//if not empty body
 					//string bodies
 					m_req.version(version);
 					m_req.method(verb);
 					m_req.target(target.c_str());
 					m_req.set(http::field::host, host.c_str());
-					m_req.set(http::field::user_agent, USER_AGENT_STRING);
-					m_req.set(http::field::content_length, std::to_string(body.size()));
-					m_req.body() = body;
+					m_req.set(http::field::user_agent, PHARMAOFFICE_USER_AGENT_STRING);
+					m_req.body() = std::forward<typename request_type::body_type::value_type>(body);
 				}
 				else if constexpr (std::is_same_v<request_body, http::file_body>) {
 					//if request is a file body 
 					http::request<http::file_body> req_{ std::piecewise_construct,
-						std::make_tuple(std::move(body)) };
+						std::make_tuple(std::forward<typename request_type::body_type::value_type>(body)) };
 					req_.method(verb);
 					req_.version(version);
 					req_.target(target.c_str());
 					req_.set(http::field::host, host.c_str());
-					req_.set(http::field::user_agent, USER_AGENT_STRING);
+					req_.set(http::field::user_agent, PHARMAOFFICE_USER_AGENT_STRING);
 					req_.set(http::field::content_length, std::to_string(req_.body().size()));
 					m_req = std::move(req_);
 
@@ -269,7 +270,7 @@ namespace pof {
 					m_req.method(verb);
 					m_req.target(target.c_str());
 					m_req.set(http::field::host, host.c_str());
-					m_req.set(http::field::user_agent, USER_AGENT_STRING);
+					m_req.set(http::field::user_agent, PHARMAOFFICE_USER_AGENT_STRING);
 				}
 				m_req.prepare_payload();
 				//ignore all other bodies for now
@@ -294,6 +295,9 @@ namespace pof {
 		template<typename res_body, typename req_body = http::empty_body>
 		using session_shared_ptr = std::shared_ptr<session<res_body, req_body>>;
 
+		template<typename res_body, typename req_body>
+		boost::asio::ip::tcp::endpoint session<res_body, req_body>::m_globalendpoint =
+			 boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 8080);
 
 		namespace ssl {
 			template<typename resp_body = beast::http::string_body, typename req_body = boost::beast::http::empty_body>
@@ -448,7 +452,7 @@ namespace pof {
 						m_req.method(verb);
 						m_req.target(target.c_str());
 						m_req.set(http::field::host, host.c_str());
-						m_req.set(http::field::user_agent, USER_AGENT_STRING);
+						m_req.set(http::field::user_agent, PHARMAOFFICE_USER_AGENT_STRING);
 						m_req.set(http::field::content_length, std::to_string(body.size()));
 
 						m_req.body() = body;
@@ -462,7 +466,7 @@ namespace pof {
 						req_.version(version);
 						req_.target(target.c_str());
 						req_.set(http::field::host, host.c_str());
-						req_.set(http::field::user_agent,USER_AGENT_STRING);
+						req_.set(http::field::user_agent, PHARMAOFFICE_USER_AGENT_STRING);
 						req_.set(http::field::content_length, std::to_string(req_.body().size()));
 						m_req = std::move(req_);
 						m_req.prepare_payload();
@@ -474,14 +478,14 @@ namespace pof {
 						m_req.method(verb);
 						m_req.target(target.c_str());
 						m_req.set(http::field::host, host.c_str());
-						m_req.set(http::field::user_agent, USER_AGENT_STRING);
+						m_req.set(http::field::user_agent, PHARMAOFFICE_USER_AGENT_STRING);
 					}
 					else if constexpr (std::is_same_v<req_body, http::vector_body>) {
 						m_req.version(version);
 						m_req.method(verb);
 						m_req.target(target.c_str());
 						m_req.set(http::field::host, host.c_str());
-						m_req.set(http::field::user_agent, USER_AGENT_STRING);
+						m_req.set(http::field::user_agent, PHARMAOFFICE_USER_AGENT_STRING);
 						m_req.set(http::field::content_type, "application/bin"s);
 						m_req.set(http::field::content_length, std::to_string(body.size()));
 

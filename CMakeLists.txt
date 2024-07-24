@@ -4,7 +4,6 @@ project(springtree VERSION 0.1 LANGUAGES CXX)
 #setup complier
 set(CMAKE_CXX_STANDARD  20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_UNITY_BUILD TRUE)
 
 
 set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR})
@@ -15,6 +14,8 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/thirdparty/OpenXLSX)
 add_subdirectory(${PROJECT_SOURCE_DIR}/thirdparty/wxFreeChart)
 
 add_definitions(-DWXUSINGDLL=1) 
+
+set(CMAKE_UNITY_BUILD TRUE)
 
 find_package(Boost REQUIRED)
 find_package(spdlog REQUIRED)
@@ -57,4 +58,4 @@ target_precompile_headers(pharmaoffice PUBLIC ${incs})
 target_link_directories(pharmaoffice PUBLIC ${PROJECT_SOURCE_DIR}/thirdparty/wxWidgets-3.2.2.1/lib/vc_x64_dll)
 target_include_directories(pharmaoffice PUBLIC ${PROJECT_SOURCE_DIR}/base/include ${PROJECT_SOURCE_DIR}/include ${spdlog_INCLUDE_DIR} ${nlohmann_json_INCLUDE_DIR} ${SQLite_INCLUDE_DIR} ${date_INCLUDE_DIR} ${asio_INCLUDE_DIR})
 target_link_libraries(pharmaoffice PUBLIC boost::boost spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json SQLite::SQLite3 LZ4::lz4_static date::date openssl::openssl ZLIB::ZLIB)
-target_link_libraries(pharmaoffice PUBLIC wxFreeCharts base formulary OpenXLSX wx::aui wx::html wx::propgrid wx::qa wx::net wx::core wx::base)
+target_link_libraries(pharmaoffice PUBLIC wxFreeCharts base OpenXLSX wx::aui wx::html wx::propgrid wx::qa wx::net wx::core wx::base)
