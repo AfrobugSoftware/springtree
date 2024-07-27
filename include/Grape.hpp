@@ -37,6 +37,16 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(std::string, info)
 )
 
+namespace grape {
+	enum class branch_type : std::uint32_t{
+		community,
+		hospital,
+		industry,
+		drf,
+		educational
+	};
+};
+
 //branches
 BOOST_FUSION_DEFINE_STRUCT(
 	(grape), branch,
@@ -44,6 +54,7 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(boost::uuids::uuid, pharmacy_id)
 	(boost::uuids::uuid, address_id)
 	(std::string, name)
+	(grape::branch_type, type)
 	(std::uint32_t, state)
 	(std::string, info)
 )
@@ -307,6 +318,68 @@ BOOST_FUSION_DEFINE_STRUCT(
 )
 
 namespace grape {
+	using opt_hash = grape::optional_field<std::string, 0>;
+	using opt_secque = grape::optional_field<std::string, 1>;
+	using opt_secans = grape::optional_field<std::string, 2>;
+	using opt_sessionid = grape::optional_field<boost::uuids::uuid, 3>;
+	using opt_session_start_time = grape::optional_field<std::chrono::system_clock::time_point, 4>;
+
+	enum class account_type : std::uint32_t {
+		pharmacist,
+		loccum_pharmacist,
+		intern_pharmacist,
+		pharmacy_tech,
+		student_pharmacist,
+		dispenser,
+		sale_assistant
+	};
+};
+
+//accounts
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape), account,
+	(boost::uuids::uuid, id)
+	(boost::uuids::uuid, account_id)
+	(grape::account_type, type)
+	(std::uint32_t, privilage)
+	(std::string, first_name)
+	(std::string, last_name)
+	(std::string, dob)
+	(std::string, phonenumber)
+	(std::string, email)
+	(std::string, username)
+	(grape::opt_fields, fields)
+	(grape::opt_hash, passhash)
+	(grape::opt_secque, sec_que)
+	(grape::opt_secans, sec_ans)
+	(grape::opt_sessionid, session_id)
+	(grape::opt_session_start_time, session_start_time)
+)
+
+//accounts collection
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape)(collection), accounts,
+	(std::vector<grape::account>, group)
+)
+
+//account cred
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape), account_cred,
+	(boost::uuids::uuid, pharmacy_id)
+	(std::string, username)
+	(std::string, password)
+	(std::chrono::system_clock::time_point, last_session_time)
+)
+
+//account sign in reponse, a session cred
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape), session_cred,
+	(std::chrono::system_clock::time_point, session_start_time)
+	(boost::uuids::uuid, session_id)
+)
+
+
+namespace grape {
 	template<typename T>
 		requires grape::FusionStruct<T>
 	using collection_type = boost::fusion::vector<std::vector<T>>;
@@ -314,4 +387,8 @@ namespace grape {
 	using pid = grape::collection_type<boost::fusion::vector<boost::uuids::uuid>>;
 	using optional_list_t = boost::fusion::vector<opt_fields, optional_field<std::vector<boost::uuids::uuid>, 0>>;
 
+	using session = pof::base::ssl::session<
+		http::vector_body<std::uint8_t>,
+		http::vector_body<std::uint8_t>
+	>;
 };

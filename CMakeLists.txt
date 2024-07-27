@@ -27,7 +27,7 @@ find_package(date REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
 
-file(GLOB incs ${PROJECT_SOURCE_DIR}/include/*.hpp)
+file(GLOB incs ${PROJECT_SOURCE_DIR}/include/*.hpp ${PROJECT_SOURCE_DIR}/include/*.h)
 file(GLOB srcs ${PROJECT_SOURCE_DIR}/src/*.cpp)
 
 if(CMAKE_SYSTEM MATCHES Windows)
@@ -54,7 +54,7 @@ endif()
 add_executable(pharmaoffice ${APP} ${incs} $<$<BOOL:${WIN32}>:pharmaoffice.rc> ${srcs} ${PROJECT_SOURCE_DIR}/main.manifest)
 
 set(CMAKE_SHARED_LINKER_FLAGS ${CMAKE_SHARED_LINKER_FLAGS} /NODEFAULTLIB)
-target_precompile_headers(pharmaoffice PUBLIC ${incs})
+##target_precompile_headers(pharmaoffice PUBLIC ${incs})
 target_link_directories(pharmaoffice PUBLIC ${PROJECT_SOURCE_DIR}/thirdparty/wxWidgets-3.2.2.1/lib/vc_x64_dll)
 target_include_directories(pharmaoffice PUBLIC ${PROJECT_SOURCE_DIR}/base/include ${PROJECT_SOURCE_DIR}/include ${spdlog_INCLUDE_DIR} ${nlohmann_json_INCLUDE_DIR} ${SQLite_INCLUDE_DIR} ${date_INCLUDE_DIR} ${asio_INCLUDE_DIR})
 target_link_libraries(pharmaoffice PUBLIC boost::boost spdlog::spdlog fmt::fmt nlohmann_json::nlohmann_json SQLite::SQLite3 LZ4::lz4_static date::date openssl::openssl ZLIB::ZLIB)

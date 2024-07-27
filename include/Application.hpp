@@ -1,9 +1,59 @@
 #pragma once
 #include <wx/app.h>
+#include <wx/msgdlg.h>
+#include <wx/valtext.h>
+#include <wx/textctrl.h>
+#include <wx/busyinfo.h>
+#include <wx/aui/framemanager.h>
+#include <wx/sysopt.h>
+#include <wx/config.h>
+#include <wx/stdpaths.h>
+#include <wx/propdlg.h>
+#include <wx/snglinst.h>
+#include <wx/debugrpt.h>
+#include <wx/file.h>
+#include <wx/ffile.h>
+#include <wx/notifmsg.h>
+#include <wx/splash.h>
+#include <wx/fontdata.h>
+#include <wx/dcmemory.h>
+
+
 #include "serialiser.h"
 #include "MainFrame.hpp"
+#include "PharmacyManager.hpp"
 
+
+#include "net.h"
+#include "netmanager.h"
+#include "Grape.hpp"
+
+#include <spdlog/spdlog.h>
+
+#include <regex>
+
+
+namespace js = nlohmann;
+namespace fs = std::filesystem;
+using namespace std::literals::string_literals;
 namespace ab {
+
+	class RegexValidator : public wxTextValidator
+	{
+	public:
+		RegexValidator(std::regex&& reg, const std::string& errorstr = {});
+		virtual wxObject* Clone() const override;
+		virtual bool TransferFromWindow() override;
+		virtual bool TransferToWindow() override;
+		virtual bool Validate(wxWindow* parent) override;
+		virtual wxString IsValid(const wxString& val) const override;
+
+	private:
+		std::string estr;
+		std::regex pattern;
+
+	};
+
 	class Application : public wxApp {
 	public:
 		Application();
@@ -13,7 +63,33 @@ namespace ab {
 		virtual int OnExit() override;
 
 		ab::MainFrame* mMainFrame = nullptr;
+		fs::path mAsserts;
+
+		void DecorateSplashScreen(wxBitmap& bmp);
+		bool LoadSettings();
+		bool SaveSettings();
+
+		grape::app_details mAppDetails;
+		grape::credentials mSessionCredentials;
+		grape::address mAppAddress;
+
+
+		ab::PharmacyManager mPharmacyManager;
+		pof::base::net_manager mNetManager;
+		std::string gVersion;
+
+		//creation functions for test
+		void CreateAddress();
+
+		//send app ping to grape
+		bool SendPing();
+		wxTimer mPingTime;
+	private:
+		bool LoadAppDetails();
+
+
 	};
+
 };
 
 DECLARE_APP(ab::Application)
