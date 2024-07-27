@@ -39,7 +39,7 @@ bool ab::PharmacyManager::CreateBranch()
 	try {
 		auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
 			app.mNetManager.ssl());
-		const ssize_t 
+		const ssize_t size = grape::serial::get_size()
 
 
 	}

@@ -38,17 +38,20 @@ ab::SetupWizard::SetupWizard(wxFrame* frame)
 
 void ab::SetupWizard::OnFinished(wxWizardEvent& evt)
 {
+    auto& app = wxGetApp();
     state = TransferDataFromWindow();
     if (state) {
-            
-             
+        bool c = app.mPharmacyManager.CreatePharmacy();
+        if(c)
+           c = app.mPharmacyManager.CreateBranch();
 
-
+        state = c;
     }
 }
 
 void ab::SetupWizard::OnAddAccount(wxCommandEvent& evt)
 {
+    //create something here
 }
 
 bool ab::SetupWizard::TransferDataFromWindow()
