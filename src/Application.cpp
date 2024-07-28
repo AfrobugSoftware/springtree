@@ -1,4 +1,5 @@
 #include "Application.hpp"
+#include "SetupWizard.hpp"
 
 IMPLEMENT_APP(ab::Application)
 boost::asio::ip::tcp::endpoint m_globalendpoint;
@@ -18,10 +19,26 @@ bool ab::Application::OnInit()
 	try {
 		if (!wxApp::OnInit()) return false;
 
+		wxInitAllImageHandlers();
+		wxArtProvider::Push(new ab::ArtProvider);
+
+		mPharmacyManager.SearchPharmacies("zi");
+
+
 		if (!LoadSettings()) {
-			wxMessageBox("Corrupt settings, please call D-GLOPA admin", "FATAL ERROR", wxICON_ERROR | wxOK);
-			OnExit();
-			return false;
+			ab::SetupWizard* wizard = new ab::SetupWizard(nullptr);
+			wizard->RunWizard(wizard->GetFirstPage());
+
+			bool state = wizard->GetState();
+			wizard->Destroy();
+			delete wizard;
+			
+
+			if (!state) {
+				OnExit();
+				return false;
+			}
+
 		}
 
 		mMainFrame = new ab::MainFrame(nullptr, wxID_ANY, wxDefaultPosition, wxSize(400, 400));
@@ -120,6 +137,35 @@ bool ab::Application::SendPing()
 		spdlog::error(exp.what());
 	}
 	return false;
+}
+
+std::string ab::Application::ParseServerError(const grape::session::response_type& resp)
+{
+	try {
+		if (!resp.has_content_length()) return ""s;
+		auto type = resp.at(http::field::content_type);
+		if (boost::iequals(type, "application/json")) {
+			//parse as json
+			auto& body = resp.body();
+			std::string jText(body.size(), 0x00);
+			std::ranges::copy(body, jText.begin());
+
+			js::json obj = js::json::parse(jText);
+			
+			return obj["result_message"];
+		}
+		else if (boost::iequals(type, "application/octlet-stream")) {
+			//parse as a stream of byte
+			auto&& [message, buf] = grape::serial::read<grape::result>(boost::asio::buffer(resp.body()));
+			return message.message;
+		}
+
+		return ""s;
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(exp.what());
+		return ""s;
+	}
 }
 
 bool ab::Application::LoadAppDetails()

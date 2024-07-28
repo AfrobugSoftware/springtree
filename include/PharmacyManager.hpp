@@ -17,6 +17,9 @@ namespace ab {
 		bool CreatePharmacy();
 		bool CreateBranch();
 
+		grape::collection_type<grape::pharmacy> GetPharmacies();
+		grape::collection_type<grape::pharmacy> SearchPharmacies(const std::string& str);
+
 		grape::credentials mSessionCredentials;
 		grape::address address;
 		grape::branch branch;

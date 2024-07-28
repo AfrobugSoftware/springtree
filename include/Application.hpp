@@ -22,7 +22,7 @@
 #include "serialiser.h"
 #include "MainFrame.hpp"
 #include "PharmacyManager.hpp"
-
+#include "ArtProvider.hpp"
 
 #include "net.h"
 #include "netmanager.h"
@@ -84,6 +84,10 @@ namespace ab {
 		//send app ping to grape
 		bool SendPing();
 		wxTimer mPingTime;
+
+		//server helpers
+		std::string ParseServerError(const grape::session::response_type& resp);
+
 	private:
 		bool LoadAppDetails();
 

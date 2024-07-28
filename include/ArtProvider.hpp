@@ -15,7 +15,7 @@ namespace ab {
 	public:
 		using bitmap_map_t = std::unordered_map<std::string, wxBitmap>;
 		ArtProvider();
-
+		virtual ~ArtProvider() {}
 	protected:
 		void CreateArtStore();
 		virtual wxSize DoGetSizeHint(const wxArtClient& client)  override;

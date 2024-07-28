@@ -272,13 +272,13 @@ void ab::SetupWizard::CreateBranchPage()
     wxBoxSizer* bSizer1;
     bSizer1 = new wxBoxSizer(wxVERTICAL);
 
-    auto contTitle = new wxStaticText(mAddressPage, wxID_ANY, wxT("Please create a pharmacy branch.\n"), wxDefaultPosition, wxDefaultSize, 0);
+    auto contTitle = new wxStaticText(mBranchPage, wxID_ANY, wxT("Please create a pharmacy branch.\n"), wxDefaultPosition, wxDefaultSize, 0);
     contTitle->Wrap(-1);
     contTitle->SetFont(wxFont(wxFontInfo(10).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
 
     bSizer1->Add(contTitle, 0, wxTOP | wxLEFT, 5);
 
-    auto conDescription = new wxStaticText(mAddressPage, wxID_ANY, wxT(R"(PharmaOffice uses arranges your pharmacy into branches, this is to allow the data and information be shared across your pharmacies)"), wxDefaultPosition, wxDefaultSize, 0);
+    auto conDescription = new wxStaticText(mBranchPage, wxID_ANY, wxT(R"(PharmaOffice uses arranges your pharmacy into branches, this is to allow the data and information be shared across your pharmacies)"), wxDefaultPosition, wxDefaultSize, 0);
     conDescription->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
     conDescription->Wrap(-1);
 
@@ -294,17 +294,13 @@ void ab::SetupWizard::CreateBranchPage()
     mBranchNameValue->SetValidator(wxTextValidator{ wxFILTER_EMPTY });
     bSizer1->Add(mBranchNameValue, 0, wxALL, 5);
 
-    mPharmacyType = new wxStaticText(m_panel1, wxID_ANY, wxT("Pharmacy type"), wxDefaultPosition, wxDefaultSize, 0);
-    mPharmacyType->Wrap(-1);
-    bSizer1->Add(mPharmacyType, 0, wxEXPAND | wxALL, 5);
-
-    mPharmacyType = new wxStaticText(m_panel1, wxID_ANY, wxT("Pharmacy type"), wxDefaultPosition, wxDefaultSize, 0);
+    mPharmacyType = new wxStaticText(mBranchPage, wxID_ANY, wxT("Pharmacy type"), wxDefaultPosition, wxDefaultSize, 0);
     mPharmacyType->Wrap(-1);
     bSizer1->Add(mPharmacyType, 0, wxEXPAND | wxALL, 5);
 
     wxString mPharamcyTypeValueChoices[] = { wxT("COMMUNITY"), wxT("HOSPITAL"), wxT("INDUSTRY"), wxT("DRF"), wxT("EDUCATIONAL") };
     int mPharamcyTypeValueNChoices = sizeof(mPharamcyTypeValueChoices) / sizeof(wxString);
-    mPharmacyTypeValue = new wxChoice(m_panel1, wxID_ANY, wxDefaultPosition, wxSize(450, -1), mPharamcyTypeValueNChoices, mPharamcyTypeValueChoices, 0);
+    mPharmacyTypeValue = new wxChoice(mBranchPage, wxID_ANY, wxDefaultPosition, wxSize(450, -1), mPharamcyTypeValueNChoices, mPharamcyTypeValueChoices, 0);
     mPharmacyTypeValue->SetSelection(0);
     mPharmacyTypeValue->Bind(wxEVT_CHOICE, [&](wxCommandEvent& evt) {
         int sel = evt.GetSelection();
@@ -332,7 +328,7 @@ void ab::SetupWizard::CreateBranchPage()
     mBranchPage->SetSizer(bSizer1);
     mBranchPage->Layout();
 
-    mAddAccountPage->Chain(mBranchPage);
+    mAddressPage->Chain(mBranchPage);
 }
 
 void ab::SetupWizard::CreateAddAccountPage()

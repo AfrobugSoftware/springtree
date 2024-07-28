@@ -150,21 +150,9 @@ namespace pof {
 
 				void on_fail(std::error_code code)
 				{
-					const int err = code.value();
-					if (err == net::error::eof
-						|| err == net::error::basic_errors::operation_aborted 
-						|| err == net::ssl::error::stream_truncated) { //ignore stream truncated error
-						return; 
-					}
-					else if (err == boost::asio::error::not_connected || err == boost::asio::error::connection_aborted ||
-						err == boost::asio::error::connection_reset || err == boost::asio::error::connection_refused) {
-						m_connected.store(false);
-					}
-					else if (boost::system::error_code(code) == http::error::end_of_stream) {
-						m_stream.shutdown();
-					}
-
 					spdlog::error("Error: {}", code.message());
+					m_connected.store(false);
+					m_stream.shutdown();
 					throw std::system_error(code);
 				}
 

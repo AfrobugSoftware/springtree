@@ -155,7 +155,9 @@ namespace grape
 
 			template<FusionStruct T>
 			void operator()(T& val) const {
-				boost::fusion::for_each(val, *this);
+				boost::fusion::for_each(val, [&](auto& i) {
+					(*this)(i);
+				});
 			}
 			template<typename T, size_t N>
 			void operator()(optional_field_set<T,N>& f) const {
@@ -259,7 +261,9 @@ namespace grape
 
 			template<FusionStruct T>
 			void operator()(const T& val) const {
-				boost::fusion::for_each(val, *this);
+				boost::fusion::for_each(val, [&](const auto& i) {
+					(*this)(i);
+				});
 			}
 
 			template<typename T, size_t N>
@@ -357,7 +361,9 @@ namespace grape
 
 			template<FusionStruct T>
 			constexpr void operator()(const T& val) const {
-				boost::fusion::for_each(val, *this);
+				boost::fusion::for_each(val, [&](const auto& i) {
+					(*this)(i);
+				});
 			}
 
 			template<typename T, size_t N>

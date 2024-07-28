@@ -72,7 +72,7 @@ namespace ab {
 		grape::branch branch;
 		grape::address address;
 
-
+		constexpr wxWizardPage* GetFirstPage() const { return mFirstPage; }
 		constexpr bool GetState() const { return state; }
 	private:
 		void OnFinished(wxWizardEvent& evt);
