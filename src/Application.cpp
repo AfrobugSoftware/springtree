@@ -22,8 +22,10 @@ bool ab::Application::OnInit()
 		wxInitAllImageHandlers();
 		wxArtProvider::Push(new ab::ArtProvider);
 
-		mPharmacyManager.SearchPharmacies("zi");
+		wxDialog::EnableLayoutAdaptation(true);
 
+
+		mPharmacyManager.GetPharmacies();
 
 		if (!LoadSettings()) {
 			ab::SetupWizard* wizard = new ab::SetupWizard(nullptr);
@@ -139,6 +141,107 @@ bool ab::Application::SendPing()
 	return false;
 }
 
+std::pair<wxPanel*, wxStaticText*> ab::Application::CreateEmptyPanel(wxPanel* parent, const std::string& text, const std::string& img, const std::string& client)
+{
+	wxPanel * mEmpty = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+	wxBoxSizer* bSizer6;
+	bSizer6 = new wxBoxSizer(wxVERTICAL);
+
+	wxPanel* m5 = new wxPanel(mEmpty, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+	wxBoxSizer* bSizer8;
+	bSizer8 = new wxBoxSizer(wxHORIZONTAL);
+
+
+	bSizer8->Add(0, 0, 1, wxEXPAND, 5);
+
+	wxPanel* m7 = new wxPanel(m5, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+	wxBoxSizer* bSizer9;
+	bSizer9 = new wxBoxSizer(wxVERTICAL);
+
+
+	bSizer9->Add(0, 0, 1, wxEXPAND, 5);
+
+	wxStaticBitmap* b1 = new wxStaticBitmap(m7, wxID_ANY, wxArtProvider::GetBitmap(img, client), wxDefaultPosition, wxDefaultSize, 0);
+	bSizer9->Add(b1, 0, wxALIGN_CENTER_HORIZONTAL | wxALIGN_CENTER_VERTICAL | wxALL, 5);
+
+	wxStaticText* mEmptyStr = new wxStaticText(m7, wxID_ANY, text, wxDefaultPosition, wxDefaultSize, 0);
+	mEmptyStr->Wrap(-1);
+	bSizer9->Add(mEmptyStr, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_CENTER_HORIZONTAL | wxALL, 5);
+
+	bSizer9->Add(0, 0, 1, wxEXPAND, 5);
+
+
+	m7->SetSizer(bSizer9);
+	m7->Layout();
+	bSizer9->Fit(m7);
+	bSizer8->Add(m7, 0, wxALIGN_CENTER_HORIZONTAL | wxALIGN_CENTER_VERTICAL | wxALL, 5);
+
+
+	bSizer8->Add(0, 0, 1, wxEXPAND, 5);
+
+
+	m5->SetSizer(bSizer8);
+	m5->Layout();
+	bSizer8->Fit(m5);
+	bSizer6->Add(m5, 1, wxEXPAND | wxALL, 5);
+
+
+	mEmpty->SetSizer(bSizer6);
+	mEmpty->Layout();
+
+	return std::make_pair(mEmpty, mEmptyStr);
+}
+
+std::pair<wxPanel*, wxActivityIndicator*> ab::Application::CreateWaitPanel(wxPanel* parent, const std::string& text)
+{
+	wxPanel* mEmpty = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+	wxBoxSizer* bSizer6;
+	bSizer6 = new wxBoxSizer(wxVERTICAL);
+
+	wxPanel* m5 = new wxPanel(mEmpty, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+	wxBoxSizer* bSizer8;
+	bSizer8 = new wxBoxSizer(wxHORIZONTAL);
+
+
+	bSizer8->Add(0, 0, 1, wxEXPAND, 5);
+
+	wxPanel* m7 = new wxPanel(m5, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+	wxBoxSizer* bSizer9;
+	bSizer9 = new wxBoxSizer(wxVERTICAL);
+
+
+	bSizer9->Add(0, 0, 1, wxEXPAND, 5);
+	wxActivityIndicator* b1 = new wxActivityIndicator(m7, wxID_ANY);
+	bSizer9->Add(b1, 0, wxALIGN_CENTER_HORIZONTAL | wxALIGN_CENTER_VERTICAL | wxALL, 5);
+
+	wxStaticText* mEmptyStr = new wxStaticText(m7, wxID_ANY, text, wxDefaultPosition, wxDefaultSize, 0);
+	mEmptyStr->Wrap(-1);
+	bSizer9->Add(mEmptyStr, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_CENTER_HORIZONTAL | wxALL, 5);
+
+	bSizer9->Add(0, 0, 1, wxEXPAND, 5);
+
+
+	m7->SetSizer(bSizer9);
+	m7->Layout();
+	bSizer9->Fit(m7);
+	bSizer8->Add(m7, 0, wxALIGN_CENTER_HORIZONTAL | wxALIGN_CENTER_VERTICAL | wxALL, 5);
+
+
+	bSizer8->Add(0, 0, 1, wxEXPAND, 5);
+
+
+	m5->SetSizer(bSizer8);
+	m5->Layout();
+	bSizer8->Fit(m5);
+	bSizer6->Add(m5, 1, wxEXPAND | wxALL, 5);
+
+
+	mEmpty->SetSizer(bSizer6);
+	mEmpty->Layout();
+
+	return std::make_pair(mEmpty, b1);
+}
+
 std::string ab::Application::ParseServerError(const grape::session::response_type& resp)
 {
 	try {
@@ -154,7 +257,7 @@ std::string ab::Application::ParseServerError(const grape::session::response_typ
 			
 			return obj["result_message"];
 		}
-		else if (boost::iequals(type, "application/octlet-stream")) {
+		else if (boost::iequals(type, "application/octet-stream")) {
 			//parse as a stream of byte
 			auto&& [message, buf] = grape::serial::read<grape::result>(boost::asio::buffer(resp.body()));
 			return message.message;

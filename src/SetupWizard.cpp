@@ -33,7 +33,6 @@ ab::SetupWizard::SetupWizard(wxFrame* frame)
     CreateBranchPage();
     CreateAddAccountPage();
     CreateSummaryPage();
-
 }
 
 void ab::SetupWizard::OnFinished(wxWizardEvent& evt)
@@ -91,6 +90,119 @@ bool ab::SetupWizard::TransferDataFromWindow()
         return false;
     }
     return true;
+}
+
+void ab::SetupWizard::CreateSelectPage()
+{
+    mSelectPage = new wxWizardPageSimple(this);
+
+    wxBoxSizer* bSizer1;
+    bSizer1 = new wxBoxSizer(wxVERTICAL);
+
+    wxPanel* cp = new wxPanel(mSelectPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+    wxBoxSizer* bS2;
+    bS2 = new wxBoxSizer(wxHORIZONTAL);
+
+    auto TitleText = new wxStaticText(cp, wxID_ANY, wxT("What would you like to do?"), wxDefaultPosition, wxDefaultSize, 0);
+    TitleText->Wrap(-1);
+    TitleText->SetFont(wxFont(wxFontInfo(10).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+    bS2->AddStretchSpacer(1);
+    bS2->Add(TitleText, 0, wxEXPAND | wxALL, 5);
+    bS2->AddStretchSpacer(1);
+    cp->SetSizer(bS2);
+    cp->Layout();
+
+    bSizer1->Add(cp, 0, wxALL, 2);
+
+    wxPanel* cp2 = new wxPanel(mSelectPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+    wxBoxSizer* bs3 = new wxBoxSizer(wxHORIZONTAL);
+    wxArrayString choices;
+    choices.push_back("Create a pharmacy"s);
+    choices.push_back("Open a branch for a pharmacy"s);
+    choices.push_back("New system in branch"s);
+    wxRadioBox* rbox = new wxRadioBox(cp2, wxID_ANY, "Please select an option"s, wxDefaultPosition, wxDefaultSize,
+    choices);
+    rbox->Bind(wxEVT_RADIOBOX, [&](wxCommandEvent& evt) {
+        select = evt.GetSelection();
+        switch (select) {
+        case 0:
+        {
+            mSelectPage->Chain(mFirstPage)
+                .Chain(mBranchPage).Chain(mAddressPage).Chain(mAddAccountPage);
+        }
+            break;
+        case 1:
+            mSelectPage->Chain(mSelectPharmacyPage).Chain(mBranchPage).Chain(mAddressPage).
+                Chain(mAddAccountPage);
+            break;
+        case 2:
+            mSelectPage->Chain(mSelectBranchPage);
+            break;
+        default:
+            break;
+        }
+     });
+
+    bs3->AddStretchSpacer();
+    bs3->Add(rbox, 1, wxALL, 2);
+    bs3->AddStretchSpacer();
+
+    cp2->SetSizer(bs3);
+    cp2->Layout();
+
+    bSizer1->Add(cp2, 0, wxALL, 2);
+
+    mSelectPage->SetSizer(bSizer1);
+    mSelectPage->Layout();
+
+    mSelectPage->Chain(mFirstPage);
+}
+
+void ab::SetupWizard::CreateSelectPharmacy()
+{
+    mSelectPharmacyPage = new wxWizardPageSimple(this);
+    wxBoxSizer* bSizer1;
+    bSizer1 = new wxBoxSizer(wxVERTICAL);
+
+    auto contTitle = new wxStaticText(mContactPage, wxID_ANY, wxT("Please select a pharmacy for this branch.\n"), wxDefaultPosition, wxDefaultSize, 0);
+    contTitle->Wrap(-1);
+    contTitle->SetFont(wxFont(wxFontInfo(10).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+
+    bSizer1->Add(contTitle, 0, wxTOP | wxLEFT, 5);
+
+    auto conDescription = new wxStaticText(mContactPage, wxID_ANY, wxT(R"(Select your pharmacy that you want to add this branch to)"), wxDefaultPosition, wxDefaultSize, 0);
+    conDescription->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+    conDescription->Wrap(-1);
+
+    bSizer1->Add(conDescription, 0, wxTOP | wxBOTTOM | wxLEFT, 5);
+
+    
+    wxSimplebook* mbook = new wxSimplebook(mSelectPharmacyPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+    mActivityIndicator = new wxActivityIndicator(mbook, ID_ACTIVITY);
+        
+    mbook->AddPage(mActivityIndicator, "Waiting", false);
+    
+    mListCtrl = new wxDataViewListCtrl(mbook, ID_LISTCTRL);
+    mListCtrl->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 300);
+    mListCtrl->AppendTextColumn("Address", wxDATAVIEW_CELL_INERT, 300);
+    mListCtrl->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, [&](wxDataViewEvent& evt) {
+        auto item = evt.GetItem();
+        if (!item.IsOk()) return;
+
+        size_t idx = reinterpret_cast<size_t>(item.GetID()) - 1;
+        pharmacy = mPharmacies[idx];
+
+        mSelectPharmacyPage->Chain(mBranchPage);
+    }, ID_LISTCTRL);
+
+    mbook->AddPage(mListCtrl, "Listctrl", true);
+
+  
+    bSizer1->Add(mbook, wxSizerFlags().Proportion(1).Expand().Border(2, wxALL));
+    mSelectPharmacyPage->SetSizer(bSizer1);
+    mSelectPharmacyPage->Layout();
+
+  //  mSelectBranchPage->Chain(mAddAccountPage);
 }
 
 void ab::SetupWizard::CreateFirstPage()
@@ -387,4 +499,164 @@ void ab::SetupWizard::CreateSummaryPage()
     mSummaryPage->Layout();
 
     mAddAccountPage->Chain(mSummaryPage);
+}
+
+void ab::SetupWizard::CreateSelectBranchPage()
+{
+    mSelectBranchPage = new  wxWizardPageSimple(this);
+    wxBoxSizer* bSizer1;
+    bSizer1 = new wxBoxSizer(wxVERTICAL);
+
+    auto contTitle = new wxStaticText(mSelectBranchPage, wxID_ANY, fmt::format("Please select a branch for {} pharmacy.\n", pharmacy.name), wxDefaultPosition, wxDefaultSize, 0);
+    contTitle->Wrap(-1);
+    contTitle->SetFont(wxFont(wxFontInfo(10).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+
+    bSizer1->Add(contTitle, 0, wxTOP | wxLEFT, FromDIP(5));
+
+    auto conDescription = new wxStaticText(mSelectBranchPage, wxID_ANY, wxT(R"(Select your pharmacy that you want to add this branch to)"), wxDefaultPosition, wxDefaultSize, 0);
+    conDescription->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+    conDescription->Wrap(-1);
+
+    bSizer1->Add(conDescription, 0, wxTOP | wxBOTTOM | wxLEFT, FromDIP(5));
+
+
+    wxPanel* Entry = new wxPanel(mSelectBranchPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+    wxBoxSizer* sz = new wxBoxSizer(wxHORIZONTAL);
+
+    sz->AddSpacer(FromDIP(10));
+
+    mBranchIdEntry = new wxTextCtrl(Entry, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+    mEnterBranchId = new wxButton(Entry, wxID_ANY, "Proceed", wxDefaultPosition, wxDefaultSize);
+    sz->Add(mBranchIdEntry, wxSizerFlags().Proportion(1).Expand().Border(wxALL, FromDIP(2)));
+    sz->Add(mEnterBranchId, wxSizerFlags().Proportion(0).Border(wxALL, FromDIP(2)));
+
+    Entry->SetSizer(sz);
+    Entry->Layout();
+
+    auto handle =  [&](wxCommandEvent& evt) {
+        auto text = mBranchIdEntry->GetValue().ToStdString();
+        try {
+            auto& app = wxGetApp();
+            auto id = boost::lexical_cast<boost::uuids::uuid>(text);
+            //how do we get the branch id
+            //show a busy info ?
+            auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+            grape::uid_t uid;
+            boost::fusion::at_c<0>(uid) = id;
+
+            grape::session::request_type::body_type::value_type body(grape::serial::get_size(uid), 0x00);
+            grape::serial::write(boost::asio::buffer(body), uid);
+
+            auto fut = sess->req(http::verb::get, "/pharmacy/getbranchesid", std::move(body));
+
+
+            //how do I wait for this
+            std::chrono::seconds elapsed = 0s;
+            std::future_status st = fut.wait_for(1s);
+            while (st != std::future_status::ready && elapsed < 30s) {
+                //keep waiting ?
+
+
+                st = fut.wait_for(1s);
+                elapsed += 1s;
+            }
+            if (elapsed > 30s) {
+                //display somethinh
+                wxMessageBox("Request timeout, please try again", "Branch ID", wxICON_INFORMATION | wxOK);
+                return;
+            }
+
+            auto resp = fut.get();
+            if (resp.result() != http::status::ok) {
+                throw std::logic_error(app.ParseServerError(resp));
+            }
+
+            auto& body = resp.body();
+            auto&& [b, buf] = grape::serial::read<grape::branch>(boost::asio::buffer(body));
+            branch = std::move(b);
+            wxMessageBox(fmt::format("Added system portal to branch {}", branch.name), "Setup", wxICON_INFORMATION | wxOK);
+        }
+        catch (const boost::bad_lexical_cast& exp) {
+            wxMessageBox(fmt::format("Invaid branch Id: {}", exp.what()), "Branch ID", wxICON_ERROR | wxOK);
+        }
+        catch (const std::exception& exp) {
+            wxMessageBox(exp.what(), "Branch ID", wxICON_ERROR | wxOK);
+        }
+    };
+
+    mBranchIdEntry->Bind(wxEVT_TEXT_ENTER, handle);
+    mEnterBranchId->Bind(wxEVT_BUTTON, handle);
+
+    bSizer1->Add(Entry, wxSizerFlags().Proportion(0).Border(wxALL, 2));
+
+    mBranchBook = new wxSimplebook(mSelectBranchPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+    
+    wxPanel* panel = new wxPanel(mBranchBook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+    wxBoxSizer* psz = new wxBoxSizer(wxVERTICAL);
+
+
+    mBranchActivityIndicator = new wxActivityIndicator(panel, ID_ACTIVITY);
+    auto d = new wxStaticText(panel, wxID_ANY, "Please wait...", wxDefaultPosition, wxDefaultSize, 0);
+
+    psz->AddSpacer(FromDIP(5));
+    psz->Add(mBranchActivityIndicator, wxSizerFlags().Proportion(1).CenterHorizontal().Expand().Border(wxALL, FromDIP(5)));
+    psz->AddSpacer(FromDIP(5));
+    psz->Add(d, wxSizerFlags().Proportion(0).CenterHorizontal().Border(wxALL, FromDIP(5)));
+
+
+    mBranchBook->AddPage(panel, "Waiting", false);
+
+    mBranchListCtrl = new wxDataViewListCtrl(mBranchBook, ID_LISTCTRL);
+    mBranchListCtrl->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 300);
+    mBranchListCtrl->AppendTextColumn("Address", wxDATAVIEW_CELL_INERT, 300);
+    mBranchListCtrl->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, [&](wxDataViewEvent& evt) {
+        auto item = evt.GetItem();
+        if (!item.IsOk()) return;
+
+        size_t idx = reinterpret_cast<size_t>(item.GetID()) - 1;
+        pharmacy = mPharmacies[idx];
+
+    }, ID_LISTCTRL);
+
+    mBranchBook->AddPage(mBranchListCtrl, "Listctrl", true);
+
+
+    bSizer1->Add(mBranchBook, wxSizerFlags().Proportion(1).Expand().Border(wxALL, FromDIP(2)));
+    mSelectBranchPage->SetSizer(bSizer1);
+    mSelectBranchPage->Layout();
+}
+
+void ab::SetupWizard::LoadPharmacies()
+{
+    auto& app = wxGetApp();
+    auto ph = app.mPharmacyManager.GetPharmacies();
+    mPharmacies = std::move(boost::fusion::at_c<0>(ph));
+
+    if (mListCtrl) {
+        for (auto p : mPharmacies) {
+            wxVector<wxVariant> mdata;
+            mdata.push_back(p.name);
+            
+
+            mListCtrl->AppendItem(mdata);
+        }
+    }
+}
+
+void ab::SetupWizard::LoadBranches()
+{
+    if (pharmacy.id == boost::uuids::nil_uuid()) return;
+
+    auto bh = wxGetApp().mPharmacyManager.GetBranches(pharmacy.id, 0, 100);
+    mBranches = std::move(boost::fusion::at_c<0>(bh));
+
+    if (mBranchListCtrl) {
+        for (auto& b : mBranches) {
+            wxVector<wxVariant> data;
+            data.push_back(b.name);
+           
+
+            mBranchListCtrl->AppendItem(data);
+        }
+    }
 }

@@ -17,6 +17,9 @@
 #include <wx/splash.h>
 #include <wx/fontdata.h>
 #include <wx/dcmemory.h>
+#include <wx/statbmp.h>
+#include <wx/stattext.h>
+#include <wx/activityindicator.h>
 
 
 #include "serialiser.h"
@@ -31,6 +34,7 @@
 #include <spdlog/spdlog.h>
 
 #include <regex>
+#include <boost/lexical_cast.hpp>
 
 
 namespace js = nlohmann;
@@ -84,6 +88,11 @@ namespace ab {
 		//send app ping to grape
 		bool SendPing();
 		wxTimer mPingTime;
+
+		//panel helpers 
+		std::pair<wxPanel*, wxStaticText*> CreateEmptyPanel(wxPanel* parent, const std::string& text, const std::string& img = ""s, const std::string& client = wxART_OTHER);
+		std::pair<wxPanel*, wxActivityIndicator*> CreateWaitPanel(wxPanel* parent, const std::string& text);
+
 
 		//server helpers
 		std::string ParseServerError(const grape::session::response_type& resp);

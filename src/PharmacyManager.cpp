@@ -87,6 +87,45 @@ grape::collection_type<grape::pharmacy> ab::PharmacyManager::GetPharmacies()
 	}
 }
 
+grape::collection_type<grape::branch> ab::PharmacyManager::GetBranches(const boost::uuids::uuid& pharm, size_t start, size_t limit)
+{
+	auto& app = wxGetApp();
+	try {
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
+			app.mNetManager.ssl());
+		grape::credentials cred;
+		cred.pharm_id = pharm;
+
+		grape::page pg;
+		pg.begin = start;
+		pg.limit = limit;
+
+		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(pg);
+		grape::session::request_type::body_type::value_type sbody(size, 0x00);
+
+		auto buf = grape::serial::write(boost::asio::buffer(sbody), cred);
+		grape::serial::write(buf, pg);
+
+		auto fut = sess->req(http::verb::get, "/pharmacy/getbranches",std::move(sbody), 30s);
+		auto resp = fut.get();
+		if (resp.result() != http::status::ok) {
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+
+		auto& body = resp.body();
+		if (body.empty()) throw std::logic_error("empty body recieved");
+
+		auto&& [collection, buf] = grape::serial::read<grape::collection_type<grape::branch>>(boost::asio::buffer(body));
+		return collection;
+
+
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(exp.what());
+		return {};
+	}
+}
+
 grape::collection_type<grape::pharmacy> ab::PharmacyManager::SearchPharmacies(const std::string& str)
 {
 	auto& app = wxGetApp();

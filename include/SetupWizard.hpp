@@ -17,6 +17,9 @@
 #include <wx/choice.h>
 #include <wx/dcclient.h>
 #include <wx/button.h>
+#include <wx/activityindicator.h>
+#include <wx/dataview.h>
+#include <wx/simplebook.h>
 
 #include "Application.hpp"
 
@@ -58,10 +61,22 @@ namespace ab {
 		wxStdDialogButtonSizer* m_sdbSizer1;
 		wxButton* m_sdbSizer1OK;
 		wxButton* m_sdbSizer1Cancel;
+		wxActivityIndicator* mActivityIndicator;
+		wxDataViewListCtrl* mListCtrl; 
+		wxActivityIndicator* mBranchActivityIndicator;
+		wxDataViewListCtrl* mBranchListCtrl;
+
+		wxButton* mEnterBranchId;
+		wxButton* mEnterPharmacyId;
+		wxTextCtrl* mBranchIdEntry;
+		wxTextCtrl* mPharmacyIdEntry;
+
 	public:
 		enum {
 			ID_FIRST_PAGE = wxID_HIGHEST + 100,
 			ID_ADD_ACCOUNT,
+			ID_ACTIVITY,
+			ID_LISTCTRL,
 		};
 
 		SetupWizard(wxFrame* frame);
@@ -81,14 +96,22 @@ namespace ab {
 		virtual bool TransferDataFromWindow() override;
 
 		//creation functions
+		void CreateSelectPage();
+		void CreateSelectPharmacy();
 		void CreateFirstPage();
 		void CreateContactPage();
 		void CreateAddressPage();
 		void CreateBranchPage();
 		void CreateAddAccountPage();
 		void CreateSummaryPage();
+		void CreateSelectBranchPage();
 
+		void LoadPharmacies();
+		void LoadBranches();
 
+		wxWizardPageSimple* mSelectPage = nullptr;
+		wxWizardPageSimple* mSelectPharmacyPage = nullptr;
+		wxWizardPageSimple* mSelectBranchPage = nullptr;
 		wxWizardPageSimple* mFirstPage = nullptr;
 		wxWizardPageSimple* mContactPage = nullptr;
 		wxWizardPageSimple* mAddressPage = nullptr;
@@ -97,7 +120,11 @@ namespace ab {
 		wxWizardPageSimple* mSummaryPage = nullptr;
 		wxButton* btn = nullptr;
 		
-		wxSize pageSize;
+
+		std::vector<grape::pharmacy> mPharmacies;
+		std::vector<grape::branch> mBranches;
+ 		wxSize pageSize;
+		int select = -1;
 		bool state = false;
 		DECLARE_EVENT_TABLE()
 

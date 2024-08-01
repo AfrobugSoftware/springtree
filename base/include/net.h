@@ -108,16 +108,20 @@ namespace pof {
 					m_io{ios},
 					m_ctx{ssl},
 					m_resolver{net::make_strand(ios.get_executor())}
-				, m_stream{ net::make_strand(ios.get_executor()), ssl }, m_connected{false} {
+					, m_stream{ net::make_strand(ios.get_executor()), ssl }, m_connected{ false }, m_dur{0s} {
 						
+				}
+
+				~session() {
+					cancel();
 				}
 
 				future_t req( http::verb v, 
 					const std::string& target,
 					typename request_type::body_type::value_type&& body,
+					std::chrono::steady_clock::duration dur = 60s,
 					const std::string& host = ""s,
-					const std::string& port = ""s,
-					std::chrono::steady_clock::duration dur = 60s) {
+					const std::string& port = ""s) {
 					//prepare the request
 					m_dur = dur;
 					prepare_request(host, target, v, body);

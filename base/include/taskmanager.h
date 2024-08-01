@@ -6,6 +6,8 @@
 #include <memory>
 #include <mutex>
 
+#include <boost/lockfree/spsc_queue.hpp>
+
 namespace pof
 {
 	namespace base {
