@@ -3,6 +3,7 @@
 
 BEGIN_EVENT_TABLE(ab::SetupWizard, wxWizard)
 	EVT_WIZARD_FINISHED(wxID_ANY, ab::SetupWizard::OnFinished)
+    EVT_WIZARD_PAGE_CHANGING(wxID_ANY, ab::SetupWizard::OnPageChanging)
 	EVT_BUTTON(ab::SetupWizard::ID_ADD_ACCOUNT, ab::SetupWizard::OnAddAccount)
 END_EVENT_TABLE()
 
@@ -27,6 +28,10 @@ ab::SetupWizard::SetupWizard(wxFrame* frame)
     SetBitmapPlacement(wxWIZARD_VALIGN_CENTRE);
     SetLayoutAdaptationMode(wxDIALOG_ADAPTATION_MODE_ENABLED);
 
+
+    CreateSelectPage();
+    CreateSelectPharmacy();
+    CreateSelectBranchPage();
     CreateFirstPage();
     CreateContactPage();
     CreateAddressPage();
@@ -46,6 +51,20 @@ void ab::SetupWizard::OnFinished(wxWizardEvent& evt)
 
         state = c;
     }
+}
+
+void ab::SetupWizard::OnPageChanging(wxWizardEvent& evt)
+{
+    if (!evt.GetDirection()) return;
+    auto page = evt.GetPage();
+    if (page->GetNext() == mSelectBranchPage) {
+        mBranchActivityIndicator->Start();
+        LoadBranches();
+    }
+}
+
+void ab::SetupWizard::OnPageChanged(wxWizardEvent& evt)
+{
 }
 
 void ab::SetupWizard::OnAddAccount(wxCommandEvent& evt)
@@ -95,9 +114,9 @@ bool ab::SetupWizard::TransferDataFromWindow()
 void ab::SetupWizard::CreateSelectPage()
 {
     mSelectPage = new wxWizardPageSimple(this);
+    mSelectPage->SetSize(pageSize);
 
-    wxBoxSizer* bSizer1;
-    bSizer1 = new wxBoxSizer(wxVERTICAL);
+    wxBoxSizer* bSizer1 = new wxBoxSizer(wxVERTICAL);
 
     wxPanel* cp = new wxPanel(mSelectPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
     wxBoxSizer* bS2;
@@ -114,7 +133,7 @@ void ab::SetupWizard::CreateSelectPage()
 
     bSizer1->Add(cp, 0, wxALL, 2);
 
-    wxPanel* cp2 = new wxPanel(mSelectPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+    wxPanel* cp2 = new wxPanel(mSelectPage, wxID_ANY, wxDefaultPosition, pageSize, wxTAB_TRAVERSAL | wxNO_BORDER);
     wxBoxSizer* bs3 = new wxBoxSizer(wxHORIZONTAL);
     wxArrayString choices;
     choices.push_back("Create a pharmacy"s);
@@ -139,52 +158,56 @@ void ab::SetupWizard::CreateSelectPage()
             mSelectPage->Chain(mSelectBranchPage);
             break;
         default:
+            mSelectPage->Chain(mFirstPage)
+                .Chain(mBranchPage).Chain(mAddressPage).Chain(mAddAccountPage);
             break;
         }
+        mSelectPage->Refresh();
      });
 
     bs3->AddStretchSpacer();
-    bs3->Add(rbox, 1, wxALL, 2);
+    bs3->Add(rbox, 0, wxALL, 2);
     bs3->AddStretchSpacer();
 
     cp2->SetSizer(bs3);
     cp2->Layout();
 
-    bSizer1->Add(cp2, 0, wxALL, 2);
+    bSizer1->Add(cp2, wxSizerFlags().Expand().Proportion(0).Border(wxALL, FromDIP(2)));
 
     mSelectPage->SetSizer(bSizer1);
     mSelectPage->Layout();
 
-    mSelectPage->Chain(mFirstPage);
+    GetPageAreaSizer()->Add(mSelectPage);
 }
 
 void ab::SetupWizard::CreateSelectPharmacy()
 {
+    auto& app = wxGetApp();
     mSelectPharmacyPage = new wxWizardPageSimple(this);
     wxBoxSizer* bSizer1;
     bSizer1 = new wxBoxSizer(wxVERTICAL);
 
-    auto contTitle = new wxStaticText(mContactPage, wxID_ANY, wxT("Please select a pharmacy for this branch.\n"), wxDefaultPosition, wxDefaultSize, 0);
+    auto contTitle = new wxStaticText(mSelectPharmacyPage, wxID_ANY, wxT("Please select a pharmacy for this branch.\n"), wxDefaultPosition, wxDefaultSize, 0);
     contTitle->Wrap(-1);
     contTitle->SetFont(wxFont(wxFontInfo(10).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
 
     bSizer1->Add(contTitle, 0, wxTOP | wxLEFT, 5);
 
-    auto conDescription = new wxStaticText(mContactPage, wxID_ANY, wxT(R"(Select your pharmacy that you want to add this branch to)"), wxDefaultPosition, wxDefaultSize, 0);
+    auto conDescription = new wxStaticText(mSelectPharmacyPage, wxID_ANY, wxT(R"(Select the pharmacy you want to add this branch to)"), wxDefaultPosition, wxDefaultSize, 0);
     conDescription->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
     conDescription->Wrap(-1);
 
     bSizer1->Add(conDescription, 0, wxTOP | wxBOTTOM | wxLEFT, 5);
 
     
-    wxSimplebook* mbook = new wxSimplebook(mSelectPharmacyPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
-    mActivityIndicator = new wxActivityIndicator(mbook, ID_ACTIVITY);
-        
-    mbook->AddPage(mActivityIndicator, "Waiting", false);
+    mPharmBook = new wxSimplebook(mSelectPharmacyPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+    wxPanel* waitPanel = nullptr;
+    std::tie(waitPanel, mActivityIndicator) = app.CreateWaitPanel(mPharmBook, "Please wait..."s);
+
+    mPharmBook->AddPage(waitPanel, "Waiting", true);
     
-    mListCtrl = new wxDataViewListCtrl(mbook, ID_LISTCTRL);
+    mListCtrl = new wxDataViewListCtrl(mPharmBook, ID_LISTCTRL);
     mListCtrl->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 300);
-    mListCtrl->AppendTextColumn("Address", wxDATAVIEW_CELL_INERT, 300);
     mListCtrl->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, [&](wxDataViewEvent& evt) {
         auto item = evt.GetItem();
         if (!item.IsOk()) return;
@@ -192,17 +215,18 @@ void ab::SetupWizard::CreateSelectPharmacy()
         size_t idx = reinterpret_cast<size_t>(item.GetID()) - 1;
         pharmacy = mPharmacies[idx];
 
-        mSelectPharmacyPage->Chain(mBranchPage);
     }, ID_LISTCTRL);
 
-    mbook->AddPage(mListCtrl, "Listctrl", true);
+    mPharmBook->AddPage(mListCtrl, "Listctrl", false);
 
-  
-    bSizer1->Add(mbook, wxSizerFlags().Proportion(1).Expand().Border(2, wxALL));
+    wxPanel* emptyPanel = nullptr;
+    std::tie(emptyPanel, std::ignore) = app.CreateEmptyPanel(mPharmBook, "No internet connection", wxART_ERROR, wxART_MESSAGE_BOX);
+
+    mPharmBook->AddPage(emptyPanel, "No connection panel", false);
+
+    bSizer1->Add(mPharmBook, wxSizerFlags().Proportion(1).Expand().Border(wxALL, FromDIP(2)));
     mSelectPharmacyPage->SetSizer(bSizer1);
     mSelectPharmacyPage->Layout();
-
-  //  mSelectBranchPage->Chain(mAddAccountPage);
 }
 
 void ab::SetupWizard::CreateFirstPage()
@@ -248,7 +272,9 @@ Let's get started.)"), wxDefaultPosition, wxDefaultSize, 0);
 
     mFirstPage->SetSizer(bSizer1);
     mFirstPage->Layout();
-    GetPageAreaSizer()->Add(mFirstPage);
+
+    mSelectPage->Chain(mFirstPage);
+   // GetPageAreaSizer()->Add(mFirstPage);
 }
 
 void ab::SetupWizard::CreateContactPage()
@@ -299,7 +325,7 @@ void ab::SetupWizard::CreateContactPage()
     mContactPage->SetSizer(bSizer1);
     mContactPage->Layout();
 
-    mFirstPage->Chain(mContactPage);
+   // mFirstPage->Chain(mContactPage);
 }
 
 void ab::SetupWizard::CreateAddressPage()
@@ -375,7 +401,7 @@ void ab::SetupWizard::CreateAddressPage()
     mAddressPage->SetSizer(bSizer1);
     mAddressPage->Layout();
 
-    mContactPage->Chain(mAddressPage);
+   // mContactPage->Chain(mAddressPage);
 }
 
 void ab::SetupWizard::CreateBranchPage()
@@ -440,7 +466,7 @@ void ab::SetupWizard::CreateBranchPage()
     mBranchPage->SetSizer(bSizer1);
     mBranchPage->Layout();
 
-    mAddressPage->Chain(mBranchPage);
+//    mAddressPage->Chain(mBranchPage);
 }
 
 void ab::SetupWizard::CreateAddAccountPage()
@@ -472,7 +498,7 @@ void ab::SetupWizard::CreateAddAccountPage()
     mAddAccountPage->SetSizer(bSizer1);
     mAddAccountPage->Layout();
 
-    mBranchPage->Chain(mAddAccountPage);
+  // mBranchPage->Chain(mAddAccountPage);
 }
 
 void ab::SetupWizard::CreateSummaryPage()
@@ -498,11 +524,12 @@ void ab::SetupWizard::CreateSummaryPage()
     mSummaryPage->SetSizer(bSizer1);
     mSummaryPage->Layout();
 
-    mAddAccountPage->Chain(mSummaryPage);
+   // mAddAccountPage->Chain(mSummaryPage);
 }
 
 void ab::SetupWizard::CreateSelectBranchPage()
 {
+    auto& app = wxGetApp();
     mSelectBranchPage = new  wxWizardPageSimple(this);
     wxBoxSizer* bSizer1;
     bSizer1 = new wxBoxSizer(wxVERTICAL);
@@ -527,6 +554,9 @@ void ab::SetupWizard::CreateSelectBranchPage()
 
     mBranchIdEntry = new wxTextCtrl(Entry, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
     mEnterBranchId = new wxButton(Entry, wxID_ANY, "Proceed", wxDefaultPosition, wxDefaultSize);
+   
+    mBranchIdEntry->SetHint("aaaa-bbbb-cccc-dddd"s);
+
     sz->Add(mBranchIdEntry, wxSizerFlags().Proportion(1).Expand().Border(wxALL, FromDIP(2)));
     sz->Add(mEnterBranchId, wxSizerFlags().Proportion(0).Border(wxALL, FromDIP(2)));
 
@@ -536,6 +566,8 @@ void ab::SetupWizard::CreateSelectBranchPage()
     auto handle =  [&](wxCommandEvent& evt) {
         auto text = mBranchIdEntry->GetValue().ToStdString();
         try {
+            if (text.empty()) return;
+
             auto& app = wxGetApp();
             auto id = boost::lexical_cast<boost::uuids::uuid>(text);
             //how do we get the branch id
@@ -571,8 +603,8 @@ void ab::SetupWizard::CreateSelectBranchPage()
                 throw std::logic_error(app.ParseServerError(resp));
             }
 
-            auto& body = resp.body();
-            auto&& [b, buf] = grape::serial::read<grape::branch>(boost::asio::buffer(body));
+            auto& body2 = resp.body();
+            auto&& [b, buf] = grape::serial::read<grape::branch>(boost::asio::buffer(body2));
             branch = std::move(b);
             wxMessageBox(fmt::format("Added system portal to branch {}", branch.name), "Setup", wxICON_INFORMATION | wxOK);
         }
@@ -581,30 +613,21 @@ void ab::SetupWizard::CreateSelectBranchPage()
         }
         catch (const std::exception& exp) {
             wxMessageBox(exp.what(), "Branch ID", wxICON_ERROR | wxOK);
+            mBranchIdEntry->Clear();
         }
     };
 
     mBranchIdEntry->Bind(wxEVT_TEXT_ENTER, handle);
     mEnterBranchId->Bind(wxEVT_BUTTON, handle);
 
-    bSizer1->Add(Entry, wxSizerFlags().Proportion(0).Border(wxALL, 2));
+    bSizer1->Add(Entry, wxSizerFlags().Proportion(0).Expand().Border(wxALL, 2));
 
     mBranchBook = new wxSimplebook(mSelectBranchPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
     
-    wxPanel* panel = new wxPanel(mBranchBook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
-    wxBoxSizer* psz = new wxBoxSizer(wxVERTICAL);
+    wxPanel* panel = nullptr;
+    std::tie(panel, mBranchActivityIndicator) = app.CreateWaitPanel(mBranchBook, "Please wait...");
 
-
-    mBranchActivityIndicator = new wxActivityIndicator(panel, ID_ACTIVITY);
-    auto d = new wxStaticText(panel, wxID_ANY, "Please wait...", wxDefaultPosition, wxDefaultSize, 0);
-
-    psz->AddSpacer(FromDIP(5));
-    psz->Add(mBranchActivityIndicator, wxSizerFlags().Proportion(1).CenterHorizontal().Expand().Border(wxALL, FromDIP(5)));
-    psz->AddSpacer(FromDIP(5));
-    psz->Add(d, wxSizerFlags().Proportion(0).CenterHorizontal().Border(wxALL, FromDIP(5)));
-
-
-    mBranchBook->AddPage(panel, "Waiting", false);
+    mBranchBook->AddPage(panel, "Waiting", true);
 
     mBranchListCtrl = new wxDataViewListCtrl(mBranchBook, ID_LISTCTRL);
     mBranchListCtrl->AppendTextColumn("Name", wxDATAVIEW_CELL_INERT, 300);
@@ -618,8 +641,12 @@ void ab::SetupWizard::CreateSelectBranchPage()
 
     }, ID_LISTCTRL);
 
-    mBranchBook->AddPage(mBranchListCtrl, "Listctrl", true);
+    mBranchBook->AddPage(mBranchListCtrl, "Listctrl", false);
 
+    wxPanel* panel2 = nullptr;
+    std::tie(panel2, std::ignore) = app.CreateEmptyPanel(mBranchBook, "No internet connection", wxART_ERROR, wxART_MESSAGE_BOX);
+
+    mBranchBook->AddPage(panel2, "Empty", false);
 
     bSizer1->Add(mBranchBook, wxSizerFlags().Proportion(1).Expand().Border(wxALL, FromDIP(2)));
     mSelectBranchPage->SetSizer(bSizer1);
@@ -649,6 +676,8 @@ void ab::SetupWizard::LoadBranches()
 
     auto bh = wxGetApp().mPharmacyManager.GetBranches(pharmacy.id, 0, 100);
     mBranches = std::move(boost::fusion::at_c<0>(bh));
+    if (mBranches.empty())
+        mBranchBook->SetSelection(2);
 
     if (mBranchListCtrl) {
         for (auto& b : mBranches) {
@@ -658,5 +687,6 @@ void ab::SetupWizard::LoadBranches()
 
             mBranchListCtrl->AppendItem(data);
         }
+        mBranchBook->SetSelection(1);
     }
 }

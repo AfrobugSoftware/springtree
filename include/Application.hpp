@@ -90,8 +90,8 @@ namespace ab {
 		wxTimer mPingTime;
 
 		//panel helpers 
-		std::pair<wxPanel*, wxStaticText*> CreateEmptyPanel(wxPanel* parent, const std::string& text, const std::string& img = ""s, const std::string& client = wxART_OTHER);
-		std::pair<wxPanel*, wxActivityIndicator*> CreateWaitPanel(wxPanel* parent, const std::string& text);
+		std::pair<wxPanel*, wxStaticText*> CreateEmptyPanel(wxWindow* parent, const std::string& text, const std::string& img = ""s, const std::string& client = wxART_OTHER);
+		std::pair<wxPanel*, wxActivityIndicator*> CreateWaitPanel(wxWindow* parent, const std::string& text);
 
 
 		//server helpers

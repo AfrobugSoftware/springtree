@@ -70,6 +70,8 @@ namespace ab {
 		wxButton* mEnterPharmacyId;
 		wxTextCtrl* mBranchIdEntry;
 		wxTextCtrl* mPharmacyIdEntry;
+		wxSimplebook* mBranchBook;
+		wxSimplebook* mPharmBook;
 
 	public:
 		enum {
@@ -87,10 +89,12 @@ namespace ab {
 		grape::branch branch;
 		grape::address address;
 
-		constexpr wxWizardPage* GetFirstPage() const { return mFirstPage; }
+		constexpr wxWizardPage* GetFirstPage() const { return mSelectPage; }
 		constexpr bool GetState() const { return state; }
 	private:
 		void OnFinished(wxWizardEvent& evt);
+		void OnPageChanging(wxWizardEvent& evt);
+		void OnPageChanged(wxWizardEvent& evt);
 		void OnAddAccount(wxCommandEvent& evt);
 
 		virtual bool TransferDataFromWindow() override;

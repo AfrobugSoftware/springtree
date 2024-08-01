@@ -141,7 +141,7 @@ bool ab::Application::SendPing()
 	return false;
 }
 
-std::pair<wxPanel*, wxStaticText*> ab::Application::CreateEmptyPanel(wxPanel* parent, const std::string& text, const std::string& img, const std::string& client)
+std::pair<wxPanel*, wxStaticText*> ab::Application::CreateEmptyPanel(wxWindow* parent, const std::string& text, const std::string& img, const std::string& client)
 {
 	wxPanel * mEmpty = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
 	wxBoxSizer* bSizer6;
@@ -192,7 +192,7 @@ std::pair<wxPanel*, wxStaticText*> ab::Application::CreateEmptyPanel(wxPanel* pa
 	return std::make_pair(mEmpty, mEmptyStr);
 }
 
-std::pair<wxPanel*, wxActivityIndicator*> ab::Application::CreateWaitPanel(wxPanel* parent, const std::string& text)
+std::pair<wxPanel*, wxActivityIndicator*> ab::Application::CreateWaitPanel(wxWindow* parent, const std::string& text)
 {
 	wxPanel* mEmpty = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
 	wxBoxSizer* bSizer6;

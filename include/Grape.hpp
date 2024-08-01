@@ -387,7 +387,7 @@ namespace grape {
 	using pid = grape::collection_type<boost::fusion::vector<boost::uuids::uuid>>;
 	using optional_list_t = boost::fusion::vector<opt_fields, optional_field<std::vector<boost::uuids::uuid>, 0>>;
 	using string_t = boost::fusion::vector<std::string>;
-	using uuid_t = boost::fusion::vector<boost::uuids::uuid>;
+	using uid_t = boost::fusion::vector<boost::uuids::uuid>;
 
 	using session = pof::base::ssl::session<
 		http::vector_body<std::uint8_t>,

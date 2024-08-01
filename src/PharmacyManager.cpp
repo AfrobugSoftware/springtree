@@ -115,7 +115,7 @@ grape::collection_type<grape::branch> ab::PharmacyManager::GetBranches(const boo
 		auto& body = resp.body();
 		if (body.empty()) throw std::logic_error("empty body recieved");
 
-		auto&& [collection, buf] = grape::serial::read<grape::collection_type<grape::branch>>(boost::asio::buffer(body));
+		auto&& [collection, buf2] = grape::serial::read<grape::collection_type<grape::branch>>(boost::asio::buffer(body));
 		return collection;
 
 
