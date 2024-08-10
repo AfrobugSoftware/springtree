@@ -32,6 +32,7 @@
 #include "Grape.hpp"
 
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
 #include <regex>
 #include <boost/lexical_cast.hpp>
@@ -90,7 +91,7 @@ namespace ab {
 		wxTimer mPingTime;
 
 		//panel helpers 
-		std::pair<wxPanel*, wxStaticText*> CreateEmptyPanel(wxWindow* parent, const std::string& text, const std::string& img = ""s, const std::string& client = wxART_OTHER);
+		std::tuple<wxPanel*, wxStaticText*, wxButton* > CreateEmptyPanel(wxWindow* parent, const std::string& text, const std::string& img = ""s, const std::string& client = wxART_OTHER);
 		std::pair<wxPanel*, wxActivityIndicator*> CreateWaitPanel(wxWindow* parent, const std::string& text);
 
 

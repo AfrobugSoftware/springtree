@@ -24,8 +24,12 @@ bool ab::Application::OnInit()
 
 		wxDialog::EnableLayoutAdaptation(true);
 
+		auto logpath = fs::current_path() / ".logs" / "log.txt";
+		auto my_logger = spdlog::basic_logger_mt("springtree", logpath.string(), true);
+		spdlog::set_default_logger(my_logger);
 
-		mPharmacyManager.GetPharmacies();
+
+		//mPharmacyManager.GetPharmacies();
 
 		if (!LoadSettings()) {
 			ab::SetupWizard* wizard = new ab::SetupWizard(nullptr);
@@ -141,7 +145,7 @@ bool ab::Application::SendPing()
 	return false;
 }
 
-std::pair<wxPanel*, wxStaticText*> ab::Application::CreateEmptyPanel(wxWindow* parent, const std::string& text, const std::string& img, const std::string& client)
+std::tuple<wxPanel*, wxStaticText*, wxButton*> ab::Application::CreateEmptyPanel(wxWindow* parent, const std::string& text, const std::string& img, const std::string& client)
 {
 	wxPanel * mEmpty = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
 	wxBoxSizer* bSizer6;
@@ -168,6 +172,13 @@ std::pair<wxPanel*, wxStaticText*> ab::Application::CreateEmptyPanel(wxWindow* p
 	mEmptyStr->Wrap(-1);
 	bSizer9->Add(mEmptyStr, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_CENTER_HORIZONTAL | wxALL, 5);
 
+	wxButton* btn = new wxButton(m7, wxID_ANY);
+	btn->SetBitmap(wxArtProvider::GetBitmap("add_task", wxART_OTHER));
+	btn->SetLabel("button");
+	btn->SetBackgroundColour(*wxWHITE);
+	bSizer9->Add(btn, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_CENTER_HORIZONTAL | wxALL, 5);
+
+
 	bSizer9->Add(0, 0, 1, wxEXPAND, 5);
 
 
@@ -189,7 +200,7 @@ std::pair<wxPanel*, wxStaticText*> ab::Application::CreateEmptyPanel(wxWindow* p
 	mEmpty->SetSizer(bSizer6);
 	mEmpty->Layout();
 
-	return std::make_pair(mEmpty, mEmptyStr);
+	return std::make_tuple(mEmpty, mEmptyStr, btn);
 }
 
 std::pair<wxPanel*, wxActivityIndicator*> ab::Application::CreateWaitPanel(wxWindow* parent, const std::string& text)

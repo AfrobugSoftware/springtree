@@ -32,11 +32,6 @@
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
 
-#include <boost/signals2/signal.hpp>
-#include <boost/lockfree/spsc_queue.hpp>
-#include <boost/lockfree/lockfree_forward.hpp> //lets see what you can give us
-#include <boost/crc.hpp>
-
 
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
@@ -58,7 +53,6 @@
 #include <atomic>
 #include <utility>
 
-#include "taskmanager.h"
 
 
 namespace beast = boost::beast;         // from <boost/beast.hpp>
@@ -328,7 +322,7 @@ namespace pof {
 						m_req.target(target.c_str());
 						m_req.set(http::field::host, host.c_str());
 						m_req.set(http::field::user_agent, PHARMAOFFICE_USER_AGENT_STRING);
-						m_req.set(http::field::content_type, "application/octlet-stream"s);
+						m_req.set(http::field::content_type, "application/octet-stream"s);
 						m_req.set(http::field::content_length, std::to_string(body.size()));
 
 						m_req.body() = std::move(body);

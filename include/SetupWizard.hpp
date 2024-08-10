@@ -23,7 +23,7 @@
 
 #include "Application.hpp"
 
-
+#include <fstream>
 #include <boost/algorithm/string.hpp>
 
 namespace ab {
@@ -72,6 +72,8 @@ namespace ab {
 		wxTextCtrl* mPharmacyIdEntry;
 		wxSimplebook* mBranchBook;
 		wxSimplebook* mPharmBook;
+		wxStaticText* mBranchEmptyText;
+		wxStaticText* mPharmEmptyText;
 
 	public:
 		enum {
@@ -81,9 +83,16 @@ namespace ab {
 			ID_LISTCTRL,
 		};
 
+		enum class setup_type {
+			create_pharmacy,
+			create_branch,
+			create_branch_system,
+		};
+
 		SetupWizard(wxFrame* frame);
 		virtual ~SetupWizard() {}
 
+		setup_type stype = setup_type::create_pharmacy;
 		grape::pharmacy pharmacy;
 		grape::account account;
 		grape::branch branch;
@@ -98,6 +107,7 @@ namespace ab {
 		void OnAddAccount(wxCommandEvent& evt);
 
 		virtual bool TransferDataFromWindow() override;
+		bool CreateAppSettings();
 
 		//creation functions
 		void CreateSelectPage();
@@ -123,7 +133,9 @@ namespace ab {
 		wxWizardPageSimple* mAddAccountPage = nullptr;
 		wxWizardPageSimple* mSummaryPage = nullptr;
 		wxButton* btn = nullptr;
-		
+		std::future<void> mLoadPharmWait;
+		std::future<void> mLoadBranchWait;
+		bool mSetupStatus = false;
 
 		std::vector<grape::pharmacy> mPharmacies;
 		std::vector<grape::branch> mBranches;

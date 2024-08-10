@@ -45,18 +45,18 @@ bool ab::PharmacyManager::CreateBranch()
 		auto buf = grape::serial::write(boost::asio::buffer(body), branch);
 		grape::serial::write(buf, address);
 
-		auto fut = sess->req(http::verb::put, "/pharmacy/createbranch", std::move(body));
+		auto fut = sess->req(http::verb::post, "/pharmacy/createbranch", std::move(body));
 
 		auto resp = fut.get();
 		if (resp.result() != http::status::created) {
-			throw std::logic_error(resp.reason().data());
+			throw std::logic_error(app.ParseServerError(resp));
 		}
 		auto&& [temp, rdbuf] = grape::serial::read<grape::branch>(boost::asio::buffer(resp.body()));
 		branch = temp;
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());
-		wxMessageBox("Failed to create pharmacy",
+		wxMessageBox(fmt::format("Failed to create pharmacy: {}", exp.what()),
 			"FATAL ERROR", wxICON_ERROR | wxOK);
 		return false;
 	}
@@ -93,17 +93,18 @@ grape::collection_type<grape::branch> ab::PharmacyManager::GetBranches(const boo
 	try {
 		auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
 			app.mNetManager.ssl());
-		grape::credentials cred;
-		cred.pharm_id = pharm;
-
+	
 		grape::page pg;
 		pg.begin = start;
 		pg.limit = limit;
 
-		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(pg);
+		grape::uid_t id;
+		boost::fusion::at_c<0>(id) = pharm;
+	
+		const size_t size = grape::serial::get_size(id) + grape::serial::get_size(pg);
 		grape::session::request_type::body_type::value_type sbody(size, 0x00);
 
-		auto buf = grape::serial::write(boost::asio::buffer(sbody), cred);
+		auto buf = grape::serial::write(boost::asio::buffer(sbody), id);
 		grape::serial::write(buf, pg);
 
 		auto fut = sess->req(http::verb::get, "/pharmacy/getbranches",std::move(sbody), 30s);
@@ -153,5 +154,35 @@ grape::collection_type<grape::pharmacy> ab::PharmacyManager::SearchPharmacies(co
 	}catch(const std::exception& exp){
 		spdlog::error(exp.what());
 		return grape::collection_type<grape::pharmacy>{};
+	}
+}
+
+void ab::PharmacyManager::GetPharmacyAddress()
+{
+	auto& app = wxGetApp();
+	try {
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
+			app.mNetManager.ssl());
+		grape::uid_t id;
+		boost::fusion::at_c<0>(id) = pharmacy.id;
+
+		const size_t size = grape::serial::get_size(id);
+		grape::session::request_type::body_type::value_type sbody(size, 0x00);
+		auto buf = grape::serial::write(boost::asio::buffer(sbody), id);
+	
+		auto fut = sess->req(http::verb::get, "/pharamcy/address", std::move(sbody), 30s);
+		
+		auto resp = fut.get();
+		if (resp.result() != http::status::ok) {
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+		auto& body = resp.body();
+		if (body.empty()) throw std::logic_error("expected a body");
+
+		auto&& [addy, buf] = grape::serial::read<grape::address>(boost::asio::buffer(body));
+		address = std::move(addy);
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(exp.what());
 	}
 }

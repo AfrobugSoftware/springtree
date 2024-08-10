@@ -4,6 +4,7 @@
         "conan": {}
     },
     "include": [
-        "C:\\Users\\zino.ferife\\sources\\springtree\\build\\CMakePresets.json"
+        "C:\\Users\\zino.ferife\\sources\\springtree\\build\\CMakePresets.json",
+        "build\\CMakePresets.json"
     ]
 }
