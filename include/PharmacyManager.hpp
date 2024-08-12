@@ -20,10 +20,14 @@ namespace ab {
 		grape::collection_type<grape::pharmacy> GetPharmacies();
 		grape::collection_type<grape::branch> GetBranches(const boost::uuids::uuid& pharm, size_t start, size_t limit);
 		grape::collection_type<grape::pharmacy> SearchPharmacies(const std::string& str);
+		void GetPharmacyAddress(); //uses the pharmacy id;
+		grape::address GetBranchAddress() const;
+
 
 		grape::credentials mSessionCredentials;
 		grape::address address;
 		grape::branch branch;
 		grape::pharmacy pharmacy;
+		grape::account account;
 	};
 };

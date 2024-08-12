@@ -38,6 +38,9 @@ ab::SetupWizard::SetupWizard(wxFrame* frame)
     CreateAddressPage();
     CreateBranchPage();
     CreateAddAccountPage();
+    CreateAccountEntryPage();
+    CreateAccountPharmacistEntryPage();
+    CreateAccountPersonalDetailsPage();
     CreateSummaryPage();
 }
 
@@ -58,13 +61,28 @@ void ab::SetupWizard::OnPageChanging(wxWizardEvent& evt)
     if (page == mSelectPharmacyPage && evt.GetDirection()) {
         if (pharmacy.id.is_nil())
         {
-            wxMessageBox("No pharmacy selected", "Setup", wxICON_ERROR | wxOK);
+            wxMessageBox("No pharmacy selected", "Setup", wxICON_WARNING | wxOK);
             evt.Veto();
         }
     }
     if (page == mSelectBranchPage && evt.GetDirection()) {
         if (branch.id.is_nil()) {
-            wxMessageBox("No branch selected", "Setup", wxICON_ERROR | wxOK);
+            wxMessageBox("No branch selected", "Setup", wxICON_WARNING | wxOK);
+            evt.Veto();
+        }
+    }
+    if (page == mAccountEntryPage && evt.GetDirection()) {
+        auto p = mPasswordValue->GetValue().ToStdString();
+        auto c = mConfirmPasswordValue->GetValue().ToStdString();
+        if (!boost::iequals(p, c)) {
+            wxMessageBox("Password mismatch, please check password", "Setup", wxICON_WARNING | wxOK);
+            evt.Veto();
+        }
+    }if (page == mAccountPersonalDetailsPage && evt.GetDirection()) {
+        auto date = mDobValue->GetValue();
+        auto now = wxDateTime::Now();
+        if ((now.GetYear() - date.GetYear()) < 18) {
+            wxMessageBox("Too young to create an acccount", "Setup", wxICON_WARNING | wxOK);
             evt.Veto();
         }
     }
@@ -119,16 +137,18 @@ bool ab::SetupWizard::TransferDataFromWindow()
 
 
         //set address regardless
-        app.mPharmacyManager.address.country = mCountryValue->GetValue().ToStdString();
-        app.mPharmacyManager.address.state = mStateValue->GetValue().ToStdString();
-        app.mPharmacyManager.address.lga = mLgaValue->GetValue().ToStdString();
-        app.mPharmacyManager.address.street = mStreetValue->GetValue().ToStdString();
-        app.mPharmacyManager.address.num = mNoValue->GetValue().ToStdString();
-        format(app.mPharmacyManager.address.country);
-        format(app.mPharmacyManager.address.state);
-        format(app.mPharmacyManager.address.lga);
-        format(app.mPharmacyManager.address.street);
-        format(app.mPharmacyManager.address.num);
+        if (address.id.is_nil()) {
+            app.mPharmacyManager.address.country = "Nigeria";
+            app.mPharmacyManager.address.state = mStateValue->GetStringSelection().ToStdString();
+            app.mPharmacyManager.address.lga = mLgaValue->GetValue().ToStdString();
+            app.mPharmacyManager.address.street = mStreetValue->GetValue().ToStdString();
+            app.mPharmacyManager.address.num = mNoValue->GetValue().ToStdString();
+            format(app.mPharmacyManager.address.country);
+            format(app.mPharmacyManager.address.state);
+            format(app.mPharmacyManager.address.lga);
+            format(app.mPharmacyManager.address.street);
+            format(app.mPharmacyManager.address.num);
+        }
 
         switch (stype)
         {
@@ -167,6 +187,8 @@ bool ab::SetupWizard::TransferDataFromWindow()
             format(app.mPharmacyManager.branch.name);
 
             app.mPharmacyManager.branch.type = static_cast<grape::branch_type>(mPharmacyTypeValue->GetSelection());
+            
+
             app.mPharmacyManager.CreateBranch();
         }
         break;
@@ -174,17 +196,61 @@ bool ab::SetupWizard::TransferDataFromWindow()
         {
             app.mPharmacyManager.pharmacy = pharmacy;
             app.mPharmacyManager.branch = branch;
+            app.mPharmacyManager.GetBranchAddress();
+
             return true;
         }
         break;
         default:
             return false;
         }
+
+        if (mAccountAdded) {
+            grape::account account;
+            account.pharmacy_id = app.mPharmacyManager.pharmacy.id;
+            account.first_name = mFirstNameValue->GetValue().ToStdString();
+            format(account.first_name);
+            account.last_name = mLastNameValue->GetValue().ToStdString();
+            format(account.last_name);
+            account.username = mUserNameValue->GetValue().ToStdString();
+            format(account.username);
+
+            account.type = static_cast<grape::account_type>(mAccountType->GetSelection());
+            account.privilage.set(mPrivilage->GetSelection());
+
+            account.passhash = bcrypt::generateHash(mPasswordValue->GetValue().ToStdString());
+            account.email = mPersonalEmailValue->GetValue().ToStdString();
+            account.phonenumber = mPersonalPhoneNoValue->GetValue().ToStdString();
+            
+            auto gdob = mDobValue->GetValue();
+            account.dob = std::chrono::year_month_day(std::chrono::year(gdob.GetYear())
+                , std::chrono::month(gdob.GetMonth()), std::chrono::day(gdob.GetDay()));
+
+            account.sec_que = app.mSecurityQuestions[mSecurityQuestions->GetSelection()].ToStdString();
+            account.sec_ans = mSecurityAnswer->GetValue().ToStdString();
+            format(account.sec_ans.value());
+
+            const size_t size = grape::serial::get_size(account);
+            grape::session::request_type::body_type::value_type body(size, 0x00);
+            grape::serial::write(boost::asio::buffer(body), account);
+
+            auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
+                app.mNetManager.ssl());
+            auto fut = sess->req(http::verb::post, "/account/signup"s, std::move(body));
+
+            auto resp = fut.get();
+            if (resp.result() != http::status::ok) {
+                throw std::logic_error(app.ParseServerError(resp));
+            }
+            
+            auto&& [rid, buf] = grape::serial::read<grape::uid_t>(boost::asio::buffer(resp.body()));
+            account.account_id = boost::fusion::at_c<0>(rid);
+            app.mPharmacyManager.account = std::move(account);
+        }
     }
     catch (const std::exception& exp) {
         spdlog::error(exp.what());
-        wxMessageBox(exp.what(), fmt::format("Error in data transfer: {}", exp.what()), wxICON_ERROR | wxOK);
-
+        wxMessageBox(exp.what(), "Setup", wxICON_ERROR | wxOK);
         return false;
     }
     return true;
@@ -239,18 +305,26 @@ void ab::SetupWizard::CreateSelectPage()
     contTitle->Wrap(-1);
     contTitle->SetFont(wxFont(wxFontInfo(10).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
 
-    bS2->AddSpacer(FromDIP(5));
+    bS2->AddSpacer(FromDIP(2));
     bS2->Add(contTitle, 0, wxTOP | wxLEFT, 5);
-        
+          
+    mDescription = new wxStaticText(cp, wxID_ANY, wxT(R"(PharmaOffice is a package designed to make the management of pharmacy simple and seamless.
+Let's get started.)"), wxDefaultPosition, wxDefaultSize, 0);
+    mDescription->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+    mDescription->Wrap(-1);
+
+    bS2->Add(mDescription, 0, wxTOP | wxBOTTOM | wxLEFT, 5);
+
+    bS2->AddSpacer(FromDIP(2));
 
     auto TitleText = new wxStaticText(cp, wxID_ANY, wxT("What would you like to do?"), wxDefaultPosition, wxDefaultSize, 0);
     TitleText->Wrap(-1);
     TitleText->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
-    
+
     //bS2->AddSpacer(FromDIP(5));
     bS2->Add(TitleText, 0, wxEXPAND | wxALL, FromDIP(5));
-    
-    
+    bS2->AddSpacer(FromDIP(2));
+
     cp->SetSizer(bS2);
     cp->Layout();
 
@@ -456,19 +530,19 @@ void ab::SetupWizard::CreateFirstPage()
     wxBoxSizer* bSizer2;
     bSizer2 = new wxBoxSizer(wxVERTICAL);
 
-    mTitle = new wxStaticText(m_panel1, wxID_ANY, wxT("Welcome to PharmaOffice\n"), wxDefaultPosition, wxDefaultSize, 0);
+    mTitle = new wxStaticText(m_panel1, wxID_ANY, wxT("Give your pharmacy a name!\n"), wxDefaultPosition, wxDefaultSize, 0);
     mTitle->Wrap(-1);
-    mTitle->SetFont(wxFont(wxFontInfo(12).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+    mTitle->SetFont(wxFont(wxFontInfo().Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
 
     bSizer2->Add(mTitle, 0, wxTOP | wxLEFT, 5);
 
 
-    mDescription = new wxStaticText(m_panel1, wxID_ANY, wxT(R"(PharmaOffice is a package designed to make the management of pharmacy simple and seamless.
-Let's get started.)"), wxDefaultPosition, wxDefaultSize, 0);
-    mDescription->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
-    mDescription->Wrap(-1);
+    auto conDescription = new wxStaticText(m_panel1, wxID_ANY, wxT(R"(A name uniquly identifies your pharmacy in PharmaOffice, also it is used in reports and receipts.)"), wxDefaultPosition, wxDefaultSize, 0);
+    conDescription->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+    conDescription->Wrap(-1);
 
-    bSizer2->Add(mDescription, 0, wxTOP | wxBOTTOM | wxLEFT, 5);
+    bSizer2->Add(conDescription, 0, wxTOP | wxBOTTOM | wxLEFT, 5);
+    bSizer2->AddSpacer(FromDIP(2));
 
     mPharamcyName = new wxStaticText(m_panel1, wxID_ANY, wxT("Pharmacy name"), wxDefaultPosition, wxDefaultSize, 0);
     mPharamcyName->Wrap(-1);
@@ -560,38 +634,15 @@ void ab::SetupWizard::CreateAddressPage()
 
     bSizer1->Add(conDescription, 0, wxTOP | wxBOTTOM | wxLEFT, 5);
 
-    mCountyText = new wxStaticText(mAddressPage, wxID_ANY, wxT("Country"), wxDefaultPosition, wxDefaultSize, 0);
-    mCountyText->Wrap(-1);
-    bSizer1->Add(mCountyText, 0, wxALL, 5);
 
-    mCountryValue = new wxTextCtrl(mAddressPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
-    mCountryValue->SetMaxLength(250);
-    bSizer1->Add(mCountryValue, 0, wxALL, 5);
+    mStateText = new wxStaticText(mAddressPage, wxID_ANY, wxT("State"), wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
+    mStateText->Wrap(-1);
+    bSizer1->Add(mStateText, 0, wxALL, 5);
+    wxArrayString states;
+    LoadStates(states);
 
-    mLgaText = new wxStaticText(mAddressPage, wxID_ANY, wxT("L.G.A"), wxDefaultPosition, wxDefaultSize, 0);
-    mLgaText->Wrap(-1);
-    bSizer1->Add(mLgaText, 0, wxALL, 5);
-
-    mLgaValue = new wxTextCtrl(mAddressPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
-    mLgaValue->SetMaxLength(250);
-    bSizer1->Add(mLgaValue, 0, wxALL, 5);
-
-    mNoText = new wxStaticText(mAddressPage, wxID_ANY, wxT("No."), wxDefaultPosition, wxDefaultSize, 0);
-    mNoText->Wrap(-1);
-    bSizer1->Add(mNoText, 0, wxALL, 5);
-
-    mNoValue = new wxTextCtrl(mAddressPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
-    mNoValue->SetMaxLength(250);
-    mNoValue->SetValidator(wxTextValidator{ wxFILTER_NUMERIC });
-    bSizer1->Add(mNoValue, 0, wxALL, 5);
-
-    mStreetText = new wxStaticText(mAddressPage, wxID_ANY, wxT("Street"), wxDefaultPosition, wxDefaultSize, 0);
-    mStreetText->Wrap(-1);
-    bSizer1->Add(mStreetText, 0, wxALL, 5);
-
-    mStreetValue = new wxTextCtrl(mAddressPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
-    mStreetValue->SetMaxLength(250);
-    bSizer1->Add(mStreetValue, 0, wxALL, 5);
+    mStateValue = new wxChoice(mAddressPage, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(450, -1)), states);
+    bSizer1->Add(mStateValue, 0, wxALL, 5);
 
     mCityText = new wxStaticText(mAddressPage, wxID_ANY, wxT("City"), wxDefaultPosition, wxDefaultSize, 0);
     mCityText->Wrap(-1);
@@ -601,14 +652,31 @@ void ab::SetupWizard::CreateAddressPage()
     mCityValue->SetMaxLength(250);
     bSizer1->Add(mCityValue, 0, wxALL, 5);
 
-    mStateText = new wxStaticText(mAddressPage, wxID_ANY, wxT("State"), wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
-    mStateText->Wrap(-1);
-    bSizer1->Add(mStateText, 0, wxALL, 5);
+    mLgaText = new wxStaticText(mAddressPage, wxID_ANY, wxT("L.G.A"), wxDefaultPosition, wxDefaultSize, 0);
+    mLgaText->Wrap(-1);
+    bSizer1->Add(mLgaText, 0, wxALL, 5);
 
-    mStateValue = new wxTextCtrl(mAddressPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
-    mStateValue->SetMaxLength(250);
-    bSizer1->Add(mStateValue, 0, wxALL, 5);
+    mLgaValue = new wxTextCtrl(mAddressPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
+    mLgaValue->SetMaxLength(250);
+    bSizer1->Add(mLgaValue, 0, wxALL, 5);
 
+    mStreetText = new wxStaticText(mAddressPage, wxID_ANY, wxT("Street"), wxDefaultPosition, wxDefaultSize, 0);
+    mStreetText->Wrap(-1);
+    bSizer1->Add(mStreetText, 0, wxALL, 5);
+
+    mStreetValue = new wxTextCtrl(mAddressPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
+    mStreetValue->SetMaxLength(250);
+    bSizer1->Add(mStreetValue, 0, wxALL, 5);
+
+    mNoText = new wxStaticText(mAddressPage, wxID_ANY, wxT("House No."), wxDefaultPosition, wxDefaultSize, 0);
+    mNoText->Wrap(-1);
+    bSizer1->Add(mNoText, 0, wxALL, 5);
+
+    mNoValue = new wxTextCtrl(mAddressPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
+    mNoValue->SetMaxLength(250);
+    mNoValue->SetValidator(wxTextValidator{ wxFILTER_NUMERIC });
+    bSizer1->Add(mNoValue, 0, wxALL, 5);
+   
 
 
     mAddressPage->SetSizer(bSizer1);
@@ -637,7 +705,7 @@ void ab::SetupWizard::CreateBranchPage()
 
 
     mBranchName = new wxStaticText(mBranchPage, wxID_ANY, wxT("Branch name: "), wxDefaultPosition, wxDefaultSize, 0);
-    mCountyText->Wrap(-1);
+    mBranchName->Wrap(-1);
     bSizer1->Add(mBranchName, 0, wxALL, 5);
 
     mBranchNameValue = new wxTextCtrl(mBranchPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
@@ -672,7 +740,7 @@ void ab::SetupWizard::CreateBranchPage()
             dc.DrawLabel(sel, rect, wxALIGN_CENTER);
         }
         });
-
+    
     bSizer1->Add(mPharmacyTypeValue, 0, wxALL, 5);
 
 
@@ -701,12 +769,22 @@ void ab::SetupWizard::CreateAddAccountPage()
 
     bSizer1->Add(conDescription, 0, wxTOP | wxBOTTOM | wxLEFT, 5);
 
-    btn = new wxButton(mAddAccountPage, ID_ADD_ACCOUNT);
-    btn->SetBitmap(wxArtProvider::GetBitmap("add_task", wxART_OTHER, FromDIP(wxSize(16, 16))));
-    btn->SetLabel("Add user account");
-    btn->SetBackgroundColour(*wxWHITE);
-    bSizer1->Add(btn, 0, wxALL, 5);
+    wxCheckBox* box = new wxCheckBox(mAddAccountPage, wxID_ANY, "Add user account"s);
+    bSizer1->Add(box, 0, wxALL, 5);
 
+    box->Bind(wxEVT_CHECKBOX, [&](wxCommandEvent& evt) {
+        if (!evt.IsChecked()) {
+            mAccountAdded = false;
+            mAddAccountPage->Chain(mSummaryPage);
+            return;
+        }
+
+        mAccountAdded = true;
+        mAddAccountPage->Chain(mAccountEntryPage)
+            .Chain(mAccountPharmacistEntryPage)
+            .Chain(mAccountPersonalDetailsPage)
+            .Chain(mSummaryPage);
+    });
 
     mAddAccountPage->SetSizer(bSizer1);
     mAddAccountPage->Layout();
@@ -875,6 +953,213 @@ void ab::SetupWizard::CreateSelectBranchPage()
     mSelectBranchPage->Layout();
 }
 
+void ab::SetupWizard::CreateAccountEntryPage()
+{
+    mAccountEntryPage = new wxWizardPageSimple(this);
+    wxBoxSizer* bSizer1;
+    bSizer1 = new wxBoxSizer(wxVERTICAL);
+
+    auto contTitle = new wxStaticText(mAccountEntryPage, wxID_ANY, "Account details", wxDefaultPosition, wxDefaultSize, 0);
+    contTitle->Wrap(-1);
+    contTitle->SetFont(wxFont(wxFontInfo(10).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+
+    bSizer1->Add(contTitle, 0, wxTOP | wxLEFT, FromDIP(5));
+
+    auto conDescription = new wxStaticText(mAccountEntryPage, wxID_ANY, wxT(R"(Please enter account details)"), wxDefaultPosition, wxDefaultSize, 0);
+    conDescription->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+    conDescription->Wrap(-1);
+
+    bSizer1->Add(conDescription, 0, wxTOP | wxBOTTOM | wxLEFT, FromDIP(5));
+
+    mLastNameLabel = new wxStaticText(mAccountEntryPage, wxID_ANY, wxT("Last Name:"), wxDefaultPosition, wxDefaultSize, 0);
+    mLastNameLabel->Wrap(-1);
+    bSizer1->Add(mLastNameLabel, 0, wxALL, 5);
+
+    mLastNameValue = new wxTextCtrl(mAccountEntryPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
+    mLastNameValue->SetMaxLength(30);
+    mLastNameValue->SetMinSize(wxSize(100, -1));
+    mLastNameValue->SetValidator(wxTextValidator{ wxFILTER_EMPTY | wxFILTER_ALPHA });
+
+    bSizer1->Add(mLastNameValue, 0, wxALL | wxEXPAND, 5);
+
+    mFirstNameLabel = new wxStaticText(mAccountEntryPage, wxID_ANY, wxT("First Name:"), wxDefaultPosition, wxDefaultSize, 0);
+    mFirstNameLabel->Wrap(-1);
+    bSizer1->Add(mFirstNameLabel, 0, wxALL, 5);
+
+    mFirstNameValue = new wxTextCtrl(mAccountEntryPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
+    mFirstNameValue->SetValidator(wxTextValidator{ wxFILTER_EMPTY | wxFILTER_ALPHA });
+    bSizer1->Add(mFirstNameValue, 0, wxALL | wxEXPAND, 5);
+
+    mAccountTypeLabel = new wxStaticText(mAccountEntryPage, wxID_ANY, wxT("Account Type"), wxDefaultPosition, wxDefaultSize, 0);
+    mAccountTypeLabel->Wrap(-1);
+    bSizer1->Add(mAccountTypeLabel, 0, wxALL, 5);
+
+    //arranged according to the account priv bits
+    wxString mAccountTypeChoices[] = { wxT("SUPERINTENDENT PHARMACIST"),
+            wxT("PHARMACY TECH"),
+            wxT("DISPENSER"),
+            wxT("SALES ASSISTANT"),
+            wxT("INTERN PHARMACIST"),
+            wxT("STUDENT PHARMACIST"),
+            wxT("MANAGER"),
+    };
+    int mAccountTypeNChoices = sizeof(mAccountTypeChoices) / sizeof(wxString);
+    mAccountType = new wxChoice(mAccountEntryPage, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(450, -1)), mAccountTypeNChoices, mAccountTypeChoices, 0);
+    bSizer1->Add(mAccountType, 0, wxALL | wxEXPAND, 5);
+    mAccountType->Bind(wxEVT_PAINT, [=](wxPaintEvent& evt) {
+        wxPaintDC dc(mAccountType);
+        wxRect rect(0, 0, dc.GetSize().GetWidth(), dc.GetSize().GetHeight());
+
+
+        dc.SetBrush(*wxWHITE);
+        dc.SetPen(*wxGREY_PEN);
+        dc.DrawRoundedRectangle(rect, 2.0f);
+        dc.DrawBitmap(wxArtProvider::GetBitmap(wxART_GO_DOWN, wxART_OTHER, FromDIP(wxSize(10, 10))), wxPoint(rect.GetWidth() - FromDIP(15), (rect.GetHeight() / 2) - FromDIP(5)));
+        auto sel = mAccountType->GetStringSelection();
+        if (!sel.IsEmpty()) {
+            dc.DrawLabel(sel, rect, wxALIGN_CENTER);
+        }
+    });
+
+    mUserNameLabel = new wxStaticText(mAccountEntryPage, wxID_ANY, wxT("Username:"), wxDefaultPosition, wxDefaultSize, 0);
+    mUserNameLabel->Wrap(-1);
+    bSizer1->Add(mUserNameLabel, 0, wxALL, 5);
+
+    mUserNameValue = new wxTextCtrl(mAccountEntryPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
+    mUserNameValue->SetValidator(wxTextValidator{ wxFILTER_EMPTY | wxFILTER_ALPHA });
+    bSizer1->Add(mUserNameValue, 0, wxALL | wxEXPAND, 5);
+
+
+    mPasswordLabel = new wxStaticText(mAccountEntryPage, wxID_ANY, wxT("Password"), wxDefaultPosition, wxDefaultSize, 0);
+    mPasswordLabel->Wrap(-1);
+    bSizer1->Add(mPasswordLabel, 0, wxALL, 5);
+
+    mPasswordValue = new wxTextCtrl(mAccountEntryPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), wxTE_PASSWORD);
+    mPasswordValue->SetValidator(wxTextValidator{ wxFILTER_EMPTY });
+    bSizer1->Add(mPasswordValue, 0, wxALL | wxEXPAND, 5);
+
+    mConfirmPasswordLabel = new wxStaticText(mAccountEntryPage, wxID_ANY, wxT("Confirm Password"), wxDefaultPosition, wxDefaultSize, 0);
+    mConfirmPasswordLabel->Wrap(-1);
+    bSizer1->Add(mConfirmPasswordLabel, 0, wxALL, 5);
+
+    mConfirmPasswordValue = new wxTextCtrl(mAccountEntryPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), wxTE_PASSWORD);
+    mConfirmPasswordValue->SetValidator(wxTextValidator{ wxFILTER_EMPTY });
+    bSizer1->Add(mConfirmPasswordValue, 0, wxALL | wxEXPAND, 5);
+
+
+    mAccountEntryPage->SetSizer(bSizer1);
+    mAccountEntryPage->Layout();
+}
+
+void ab::SetupWizard::CreateAccountPharmacistEntryPage()
+{
+    auto& app = wxGetApp();
+    mAccountPharmacistEntryPage = new wxWizardPageSimple(this);
+    wxBoxSizer* bSizer1;
+    bSizer1 = new wxBoxSizer(wxVERTICAL);
+
+    auto contTitle = new wxStaticText(mAccountPharmacistEntryPage, wxID_ANY, "Pharmacist details", wxDefaultPosition, wxDefaultSize, 0);
+    contTitle->Wrap(-1);
+    contTitle->SetFont(wxFont(wxFontInfo(10).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+
+    bSizer1->Add(contTitle, 0, wxTOP | wxLEFT, FromDIP(5));
+
+    auto conDescription = new wxStaticText(mAccountPharmacistEntryPage, wxID_ANY, wxT(R"(Please enter pharmacist details)"), wxDefaultPosition, wxDefaultSize, 0);
+    conDescription->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+    conDescription->Wrap(-1);
+
+    bSizer1->Add(conDescription, 0, wxTOP | wxBOTTOM | wxLEFT, FromDIP(5));
+
+    mRegNumberLabel = new wxStaticText(mAccountPharmacistEntryPage, wxID_ANY, wxT("Reg-No"), wxDefaultPosition, wxDefaultSize, 0);
+    mRegNumberLabel->Wrap(-1);
+    bSizer1->Add(mRegNumberLabel, 0, wxALL, 5);
+
+    mRegNumValue = new wxTextCtrl(mAccountPharmacistEntryPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
+    bSizer1->Add(mRegNumValue, 0, wxALL | wxEXPAND, 5);
+
+    wxString m_radioBox2Choices[] = { wxT("Principal Pharmacist"), wxT("Loccum Pharmacist") };
+    int m_radioBox2NChoices = sizeof(m_radioBox2Choices) / sizeof(wxString);
+    mPrivilage = new wxRadioBox(mAccountPharmacistEntryPage, wxID_ANY, wxT("Phamacist role"), wxDefaultPosition, wxDefaultSize, m_radioBox2NChoices, m_radioBox2Choices, 1, wxRA_SPECIFY_COLS);
+    bSizer1->Add(mPrivilage, 0, wxALL | wxEXPAND, 5);
+
+    bSizer1->AddSpacer(FromDIP(10));
+
+    auto conDescription2 = new wxStaticText(mAccountPharmacistEntryPage, wxID_ANY, wxT(R"(Please enter security detail for account)"), wxDefaultPosition, wxDefaultSize, 0);
+    conDescription2->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+    conDescription2->Wrap(-1);
+
+    bSizer1->Add(conDescription2, 0, wxTOP | wxBOTTOM | wxLEFT, FromDIP(5));
+    bSizer1->AddSpacer(FromDIP(10));
+
+    auto m_panel4 = new wxPanel(mAccountPharmacistEntryPage, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
+    wxStaticBoxSizer* sbSizer7 = new wxStaticBoxSizer(new wxStaticBox(m_panel4, wxID_ANY, wxT("Security questions")), wxVERTICAL);
+
+    mSecurityQuestions = new wxChoice(sbSizer7->GetStaticBox(), wxID_ANY, wxDefaultPosition, wxDefaultSize, app.mSecurityQuestions, 0);
+    sbSizer7->Add(mSecurityQuestions, 0, wxALL | wxEXPAND, 5);
+
+    mSecurityAnswer = new wxTextCtrl(sbSizer7->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0);
+    mSecurityAnswer->SetValidator(wxTextValidator{ wxFILTER_EMPTY });
+    sbSizer7->Add(mSecurityAnswer, 0, wxALL | wxEXPAND, 5);
+
+    m_panel4->SetSizer(sbSizer7);
+    m_panel4->Layout();
+    sbSizer7->Fit(m_panel4);
+
+    bSizer1->Add(m_panel4, 0, wxALL | wxEXPAND, 5);
+
+
+    mAccountPharmacistEntryPage->SetSizer(bSizer1);
+    mAccountPharmacistEntryPage->Layout();
+}
+
+void ab::SetupWizard::CreateAccountPersonalDetailsPage()
+{
+    mAccountPersonalDetailsPage = new wxWizardPageSimple(this);
+    wxBoxSizer* bSizer1;
+    bSizer1 = new wxBoxSizer(wxVERTICAL);
+
+    auto contTitle = new wxStaticText(mAccountPersonalDetailsPage, wxID_ANY, "Personal details", wxDefaultPosition, wxDefaultSize, 0);
+    contTitle->Wrap(-1);
+    contTitle->SetFont(wxFont(wxFontInfo(10).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+
+    bSizer1->Add(contTitle, 0, wxTOP | wxLEFT, FromDIP(5));
+
+    auto conDescription = new wxStaticText(mAccountPersonalDetailsPage, wxID_ANY, wxT(R"(Please enter personal details)"), wxDefaultPosition, wxDefaultSize, 0);
+    conDescription->SetFont(wxFont(wxFontInfo().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+    conDescription->Wrap(-1);
+
+    bSizer1->Add(conDescription, 0, wxTOP | wxBOTTOM | wxLEFT, FromDIP(5));
+
+
+    mPersonalPhoneNoLabel = new wxStaticText(mAccountPersonalDetailsPage, wxID_ANY, wxT("Phone no"), wxDefaultPosition, wxDefaultSize, 0);
+    mPersonalPhoneNoLabel->Wrap(-1);
+    bSizer1->Add(mPersonalPhoneNoLabel, 0, wxALL, 5);
+
+    mPersonalPhoneNoValue = new wxTextCtrl(mAccountPersonalDetailsPage , wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
+    mPersonalPhoneNoValue->SetValidator(ab::RegexValidator(std::regex("(0|91)?[6-9][0-9]{9}"), "Invalid phone number"));
+    bSizer1->Add(mPersonalPhoneNoValue, 0, wxALL | wxEXPAND, 5);
+
+    mPersonalEmailLabel = new wxStaticText(mAccountPersonalDetailsPage , wxID_ANY, wxT("Email"), wxDefaultPosition, wxDefaultSize, 0);
+    mPersonalEmailLabel->Wrap(-1);
+    bSizer1->Add(mPersonalEmailLabel, 0, wxALL, 5);
+
+    mPersonalEmailValue = new wxTextCtrl(mAccountPersonalDetailsPage, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(450, -1)), 0);
+    mPersonalEmailValue->SetValidator(ab::RegexValidator(std::regex(R"(^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$)"), "Invalid email address"));
+    bSizer1->Add(mPersonalEmailValue, 0, wxALL | wxEXPAND, 5);
+
+    mDobLabel = new wxStaticText(mAccountPersonalDetailsPage, wxID_ANY, wxT("Date of birth"), wxDefaultPosition, wxDefaultSize, 0);
+    mDobLabel->Wrap(-1);
+    bSizer1->Add(mDobLabel, 0, wxALL, 5);
+
+    mDobValue = new wxDatePickerCtrl(mAccountPersonalDetailsPage, wxID_ANY, wxDateTime::Now(), wxDefaultPosition, FromDIP(wxSize(200, -1)), wxDP_DROPDOWN);
+    mDobValue->SetRange(wxDateTime{}, wxDateTime::Now());
+    bSizer1->Add(mDobValue, 0, wxALL, 5);
+
+
+    mAccountPersonalDetailsPage->SetSizer(bSizer1);
+    mAccountPersonalDetailsPage->Layout();
+}
+
 void ab::SetupWizard::LoadPharmacies()
 {
     auto& app = wxGetApp();
@@ -931,5 +1216,27 @@ void ab::SetupWizard::LoadBranches()
         }
         mBranchActivityIndicator->Stop();
         mBranchBook->SetSelection(1);
+    }
+}
+
+void ab::SetupWizard::LoadStates(wxArrayString& states)
+{
+    states.reserve(36);
+    auto fpath = fs::current_path() / "asserts" / "dropdown.json";
+    try {
+        std::fstream file(fpath, std::ios::in);
+        if (!file.is_open())
+            throw std::logic_error("cannot open file");
+        std::stringstream str;
+        str << file.rdbuf();
+
+        js::json dropdown = js::json::parse(str.str());
+        auto& arr = dropdown["nigerian_states"];
+        for (auto& s : arr) {
+            states.push_back(static_cast<std::string>(s));
+        }
+    }
+    catch (const std::exception& exp) {
+        spdlog::error(exp.what());
     }
 }

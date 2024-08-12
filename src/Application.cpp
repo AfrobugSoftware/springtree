@@ -24,6 +24,7 @@ bool ab::Application::OnInit()
 
 		wxDialog::EnableLayoutAdaptation(true);
 
+		CreateSecurityQuestions();
 		auto logpath = fs::current_path() / ".logs" / "log.txt";
 		auto my_logger = spdlog::basic_logger_mt("springtree", logpath.string(), true);
 		spdlog::set_default_logger(my_logger);
@@ -123,6 +124,16 @@ void ab::Application::CreateAddress()
 	mAppAddress.lga = "isoko north";
 	mAppAddress.street = "dbs road";
 	mAppAddress.state = "delta";
+}
+
+void ab::Application::CreateSecurityQuestions()
+{
+	mSecurityQuestions.push_back("What was the name of your first school teacher?");
+	mSecurityQuestions.push_back("What year did you enter college?");
+	mSecurityQuestions.push_back("What is your grandmother’s maiden name?");
+	mSecurityQuestions.push_back("What color do you like the most?");
+	mSecurityQuestions.push_back("What’s your favorite artist?");
+	mSecurityQuestions.push_back("What book do you recommend to your friends?");
 }
 
 bool ab::Application::SendPing()

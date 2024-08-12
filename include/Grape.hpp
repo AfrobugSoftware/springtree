@@ -338,13 +338,13 @@ namespace grape {
 //accounts
 BOOST_FUSION_DEFINE_STRUCT(
 	(grape), account,
-	(boost::uuids::uuid, id)
+	(boost::uuids::uuid, pharmacy_id)
 	(boost::uuids::uuid, account_id)
 	(grape::account_type, type)
-	(std::uint32_t, privilage)
+	(std::bitset<5>, privilage)
 	(std::string, first_name)
 	(std::string, last_name)
-	(std::string, dob)
+	(std::chrono::year_month_day, dob)
 	(std::string, phonenumber)
 	(std::string, email)
 	(std::string, username)

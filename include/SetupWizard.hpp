@@ -20,8 +20,11 @@
 #include <wx/activityindicator.h>
 #include <wx/dataview.h>
 #include <wx/simplebook.h>
+#include <wx/datectrl.h>
 
 #include "Application.hpp"
+#include "../base/bcrypt/include/bcrypt.h"
+
 
 #include <fstream>
 #include <boost/algorithm/string.hpp>
@@ -46,8 +49,6 @@ namespace ab {
 		wxStaticText* mWebsiteText;
 		wxTextCtrl* mWebsiteValue;
 		wxPanel* m_panel4;
-		wxStaticText* mCountyText;
-		wxTextCtrl* mCountryValue;
 		wxStaticText* mLgaText;
 		wxTextCtrl* mLgaValue;
 		wxStaticText* mNoText;
@@ -57,7 +58,7 @@ namespace ab {
 		wxStaticText* mCityText;
 		wxTextCtrl* mCityValue;
 		wxStaticText* mStateText;
-		wxTextCtrl* mStateValue;
+		wxChoice* mStateValue;
 		wxStdDialogButtonSizer* m_sdbSizer1;
 		wxButton* m_sdbSizer1OK;
 		wxButton* m_sdbSizer1Cancel;
@@ -65,6 +66,7 @@ namespace ab {
 		wxDataViewListCtrl* mListCtrl; 
 		wxActivityIndicator* mBranchActivityIndicator;
 		wxDataViewListCtrl* mBranchListCtrl;
+		wxCheckBox* mAddCountCheckBox;
 
 		wxButton* mEnterBranchId;
 		wxButton* mEnterPharmacyId;
@@ -74,6 +76,32 @@ namespace ab {
 		wxSimplebook* mPharmBook;
 		wxStaticText* mBranchEmptyText;
 		wxStaticText* mPharmEmptyText;
+
+		wxStaticText* mLastNameLabel;
+		wxTextCtrl* mLastNameValue;
+		wxStaticText* mFirstNameLabel;
+		wxTextCtrl* mFirstNameValue;
+		wxStaticText* mUserNameLabel;
+		wxTextCtrl* mUserNameValue;
+		wxStaticText* mAccountTypeLabel;
+		wxChoice* mAccountType;
+		wxStaticText* mSecurityQuestionLabel;
+		wxChoice* mSecurityQuestions;
+		wxTextCtrl* mSecurityAnswer;
+		wxStaticText* mPersonalPhoneNoLabel;
+		wxTextCtrl* mPersonalPhoneNoValue;
+		wxStaticText* mPersonalEmailLabel;
+		wxTextCtrl* mPersonalEmailValue;
+		wxStaticText* mDobLabel;
+		wxDatePickerCtrl* mDobValue;
+
+		wxStaticText* mPasswordLabel;
+		wxTextCtrl* mPasswordValue;
+		wxStaticText* mConfirmPasswordLabel;
+		wxTextCtrl* mConfirmPasswordValue;
+		wxStaticText* mRegNumberLabel;
+		wxTextCtrl* mRegNumValue;
+		wxRadioBox* mPrivilage;
 
 	public:
 		enum {
@@ -120,8 +148,14 @@ namespace ab {
 		void CreateSummaryPage();
 		void CreateSelectBranchPage();
 
+		void CreateAccountEntryPage();
+		void CreateAccountPharmacistEntryPage();
+		void CreateAccountPersonalDetailsPage();
+
 		void LoadPharmacies();
 		void LoadBranches();
+
+		void LoadStates(wxArrayString& states);
 
 		wxWizardPageSimple* mSelectPage = nullptr;
 		wxWizardPageSimple* mSelectPharmacyPage = nullptr;
@@ -132,10 +166,16 @@ namespace ab {
 		wxWizardPageSimple* mBranchPage = nullptr;
 		wxWizardPageSimple* mAddAccountPage = nullptr;
 		wxWizardPageSimple* mSummaryPage = nullptr;
+		wxWizardPageSimple* mAccountEntryPage = nullptr;
+		wxWizardPageSimple* mAccountPharmacistEntryPage = nullptr;
+		wxWizardPageSimple* mAccountPersonalDetailsPage = nullptr;
+
+
 		wxButton* btn = nullptr;
 		std::future<void> mLoadPharmWait;
 		std::future<void> mLoadBranchWait;
 		bool mSetupStatus = false;
+		bool mAccountAdded = false;
 
 		std::vector<grape::pharmacy> mPharmacies;
 		std::vector<grape::branch> mBranches;

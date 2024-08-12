@@ -78,7 +78,7 @@ namespace ab {
 		grape::credentials mSessionCredentials;
 		grape::address mAppAddress;
 
-
+		wxArrayString mSecurityQuestions;
 		ab::PharmacyManager mPharmacyManager;
 		pof::base::net_manager mNetManager;
 		std::string gVersion;
@@ -86,6 +86,7 @@ namespace ab {
 		//creation functions for test
 		void CreateAddress();
 
+		void CreateSecurityQuestions();
 		//send app ping to grape
 		bool SendPing();
 		wxTimer mPingTime;

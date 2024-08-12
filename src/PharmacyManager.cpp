@@ -161,15 +161,9 @@ void ab::PharmacyManager::GetPharmacyAddress()
 {
 	auto& app = wxGetApp();
 	try {
-		auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
-			app.mNetManager.ssl());
-		grape::uid_t id;
-		boost::fusion::at_c<0>(id) = pharmacy.id;
-
-		const size_t size = grape::serial::get_size(id);
-		grape::session::request_type::body_type::value_type sbody(size, 0x00);
-		auto buf = grape::serial::write(boost::asio::buffer(sbody), id);
-	
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+		
+		grape::session::request_type::body_type::value_type sbody(pharmacy.id.begin(), pharmacy.id.end());
 		auto fut = sess->req(http::verb::get, "/pharamcy/address", std::move(sbody), 30s);
 		
 		auto resp = fut.get();
@@ -179,10 +173,35 @@ void ab::PharmacyManager::GetPharmacyAddress()
 		auto& body = resp.body();
 		if (body.empty()) throw std::logic_error("expected a body");
 
-		auto&& [addy, buf] = grape::serial::read<grape::address>(boost::asio::buffer(body));
+		auto&& [addy, b] = grape::serial::read<grape::address>(boost::asio::buffer(body));
 		address = std::move(addy);
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());
+	}
+}
+
+grape::address ab::PharmacyManager::GetBranchAddress() const
+{
+	auto& app = wxGetApp();
+	try {
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+
+		grape::session::request_type::body_type::value_type body(branch.id.begin(), branch.id.end());
+		auto fut = sess->req(http::verb::get, "/pharmacy/branch/address", std::move(body));
+		grape::session::response_type resp = fut.get();
+		if (resp.result() != http::status::ok) {
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+
+		auto& sbody = resp.body();
+		if (sbody.empty()) throw std::logic_error("expected a body");
+
+		auto&& [addy, b] = grape::serial::read<grape::address>(boost::asio::buffer(sbody));
+		return addy;
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(exp.what());
+		return grape::address();
 	}
 }

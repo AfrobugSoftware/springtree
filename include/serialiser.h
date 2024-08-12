@@ -95,6 +95,14 @@ namespace grape
 				e = static_cast<E>(v);
 			}
 
+			template<size_t N>
+				requires (std::integral_constant<int, N>::value <= 32)
+			void operator()(std::bitset<N>& bs) const {
+				std::uint32_t val = 0;
+				(*this)(val);
+				bs = std::bitset<N>(val);
+			}
+
 			template<Hashable K, typename T>
 			void operator()(boost::unordered_flat_map<K, T>& map) const {
 				std::uint32_t len = 0;
@@ -211,6 +219,14 @@ namespace grape
 				buf_ += sizeof(T);
 			}
 
+			template<size_t N>
+				requires (std::integral_constant<int, N>::value <= 32)
+			void operator()(const std::bitset<N>& bs) const {
+				std::uint32_t val = bs.to_ulong();
+				(*this)(val);
+			}
+
+
 			template<Enums E>
 			void operator()(E& e) const {
 				auto i = static_cast<std::underlying_type_t<E>>(e);
@@ -321,6 +337,12 @@ namespace grape
 			template<Integers T>
 			constexpr void operator()(const T& i) const {
 				size += sizeof(T);
+			}
+
+			template<size_t N>
+				requires (std::integral_constant<int, N>::value <= 32)
+			constexpr void operator()(const std::bitset<N>& bs) const {
+				size += sizeof(std::uint32_t);
 			}
 
 			template<Enums T>
