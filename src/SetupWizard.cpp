@@ -85,6 +85,9 @@ void ab::SetupWizard::OnPageChanging(wxWizardEvent& evt)
             wxMessageBox("Too young to create an acccount", "Setup", wxICON_WARNING | wxOK);
             evt.Veto();
         }
+    }if (page == mFirstPage && evt.GetDirection()) {
+        
+
     }
 }
 

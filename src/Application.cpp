@@ -1,6 +1,8 @@
 #include "Application.hpp"
 #include "SetupWizard.hpp"
 
+#include "DataModel.hpp"
+
 IMPLEMENT_APP(ab::Application)
 boost::asio::ip::tcp::endpoint m_globalendpoint;
 
@@ -31,6 +33,7 @@ bool ab::Application::OnInit()
 
 
 		//mPharmacyManager.GetPharmacies();
+		//ab::DataModel<grape::product> mProductModel;
 
 		if (!LoadSettings()) {
 			ab::SetupWizard* wizard = new ab::SetupWizard(nullptr);
