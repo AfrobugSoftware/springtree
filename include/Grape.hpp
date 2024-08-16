@@ -18,6 +18,15 @@ using opt_field_currency = grape::optional_field<pof::base::currency, N>;
 template<size_t N>
 using opt_field_uuid = grape::optional_field<boost::uuids::uuid, N>;
 
+//tree drag and drop data
+BOOST_FUSION_DEFINE_STRUCT(
+	(ab), treeDnd,
+	(size_t, id)
+	(void*, win)
+	(std::string, name)
+	(int, img)
+)
+
 //institution
 BOOST_FUSION_DEFINE_STRUCT(
 	(grape), institution,

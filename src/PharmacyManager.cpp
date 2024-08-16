@@ -205,3 +205,31 @@ grape::address ab::PharmacyManager::GetBranchAddress() const
 		return grape::address();
 	}
 }
+
+std::string ab::PharmacyManager::GetAccountTypeAsString() const
+{
+	static const std::array<std::string_view, 7> account_type_string = 
+	{
+		   "SUPERINTENDENT PHARMACIST", 
+		   "PHARMTECH", 
+		   "DISPENSER", 
+		   "SALES ASSISTANT", 
+		   "INTERN PHARMACIST", 
+		   "STUDENT PHARMACIST",
+			"MANAGER"
+	};
+	return std::string(account_type_string[static_cast<std::underlying_type_t<grape::account_type>>(account.type)]);
+}
+
+std::string ab::PharmacyManager::GetPharmacyTypeAsString() const
+{
+	constexpr static const std::array<std::string_view, 5> sPharamcyTypes =
+	{
+	   "COMMUNITY",
+	   "HOSPITAL",
+	   "INDUSTRY",
+	   "WHOLESALE",
+	   "EDUCATIONAL"
+	};
+	return std::string(sPharamcyTypes[static_cast<std::underlying_type_t<grape::branch_type>>(branch.type)]);
+}

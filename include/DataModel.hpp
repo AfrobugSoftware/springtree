@@ -32,7 +32,7 @@ namespace ab {
 
 		
 		DataModel(size_t count = 0) : wxDataViewVirtualListModel(count), vec_base(count) {}
-		~DataModel() = default;
+		virtual ~DataModel() = default;
 
 		virtual bool GetAttrByRow(unsigned int row, unsigned int col, wxDataViewItemAttr& attr) const override
 		{
@@ -148,6 +148,7 @@ namespace ab {
 					boost::fusion::for_each(range(), [&](auto i) {
 					using constant = std::decay_t<decltype(i)>;
 					using arg_type = std::decay_t<decltype(boost::fusion::at<constant>(r))>;
+					if (constant::value != col) return;
 
 
 					auto& v = boost::fusion::at_c<constant::value>(r);

@@ -33,6 +33,9 @@ namespace grape
 	template<typename T>
 	concept FusionStruct = boost::mpl::is_sequence<T>::value;
 
+	template<typename T>
+	concept Pointer = std::is_pointer_v<T>;
+
 	template<Integers T>
 	constexpr auto bswap(const T& value) -> T {
 		auto value_representation = std::bit_cast<std::array<std::byte, sizeof(T)>>(value);
@@ -102,6 +105,12 @@ namespace grape
 				(*this)(val);
 				bs = std::bitset<N>(val);
 			}
+
+			/*template<Pointer T>
+			void operator()(T& p) const {
+				p = bswap(*boost::asio::buffer_cast<const T*>(buf_));
+				buf_ += sizeof(T);
+			}*/
 
 			template<Hashable K, typename T>
 			void operator()(boost::unordered_flat_map<K, T>& map) const {
@@ -226,6 +235,11 @@ namespace grape
 				(*this)(val);
 			}
 
+			/*template<Pointer T>
+			void operator()(const T& p) const {
+				*boost::asio::buffer_cast<T*>(buf_) = bswap(p);
+				buf_ += sizeof(T);
+			}*/
 
 			template<Enums E>
 			void operator()(E& e) const {
@@ -344,6 +358,11 @@ namespace grape
 			constexpr void operator()(const std::bitset<N>& bs) const {
 				size += sizeof(std::uint32_t);
 			}
+
+			/*template<Pointer T>
+			constexpr void operator()(const T& i) const {
+				size += sizeof(T);
+			}*/
 
 			template<Enums T>
 			constexpr void operator()(const T& i) const {

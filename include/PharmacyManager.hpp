@@ -23,6 +23,8 @@ namespace ab {
 		void GetPharmacyAddress(); //uses the pharmacy id;
 		grape::address GetBranchAddress() const;
 
+		std::string GetAccountTypeAsString() const;
+		std::string GetPharmacyTypeAsString() const;
 
 		grape::credentials mSessionCredentials;
 		grape::address address;
