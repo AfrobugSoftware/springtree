@@ -39,7 +39,7 @@ namespace ab {
 	};
 
 
-	extern bool operator==(const wxTreeItemId& a, const wxTreeItemId& b);
+	//extern bool operator==(const wxTreeItemId& a, const wxTreeItemId& b);
 	extern std::size_t hash_value(wxTreeItemId const& b);
 
 	class Modules : public wxPanel

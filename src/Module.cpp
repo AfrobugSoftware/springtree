@@ -19,6 +19,7 @@ ab::Modules::Modules(wxWindow* parent, wxWindowID id, const wxPoint& pos, const 
 	auto& pharmacy = app.mPharmacyManager.pharmacy;
 
 	auto cap = [&](const std::string& name) -> std::string {
+		if (name.empty()) return ""s;
 		std::string ret = name;
 		*ret.begin() = std::toupper(*ret.begin());
 		return ret;
@@ -116,19 +117,19 @@ void ab::Modules::CreateTree()
 	wxTreeItemId root = mModuleTree->AddRoot("Root", -1);
 
 
-	mPharmacy = mModuleTree->AppendItem(root, "Pharamacy", 9);
-	mTransactions = mModuleTree->AppendItem(root, "Transactions", 10);
+	mPharmacy = mModuleTree->AppendItem(root, "Pharamacy", 4);
+	mTransactions = mModuleTree->AppendItem(root, "Transactions", 5);
 
 
-	mProducts = mModuleTree->AppendItem(mPharmacy, "Products", 5);
-	mPaitents = mModuleTree->AppendItem(mPharmacy, "Patients", 7);
-	mPrescriptions = mModuleTree->AppendItem(mPharmacy, "Prescriptions", 11);
-	mPoisionBook = mModuleTree->AppendItem(mPharmacy, "Poision Book", 12);
+	mProducts = mModuleTree->AppendItem(mPharmacy, "Products", 0);
+	mPaitents = mModuleTree->AppendItem(mPharmacy, "Patients", 2);
+	mPrescriptions = mModuleTree->AppendItem(mPharmacy, "Prescriptions", 6);
+	mPoisionBook = mModuleTree->AppendItem(mPharmacy, "Poision Book", 7);
 
-	mSales = mModuleTree->AppendItem(mTransactions, "Sales", 6);
-	mAuditTrails = mModuleTree->AppendItem(mTransactions, "Audit Trails", 13);
-	mRequisitions = mModuleTree->AppendItem(mTransactions, "Requisitions", 15);
-	mOrders = mModuleTree->AppendItem(mTransactions, "ADR Reports", 14);
+	mSales = mModuleTree->AppendItem(mTransactions, "Sales", 1);
+	mAuditTrails = mModuleTree->AppendItem(mTransactions, "Audit Trails", 8);
+	mRequisitions = mModuleTree->AppendItem(mTransactions, "Requisitions", 10);
+	mOrders = mModuleTree->AppendItem(mTransactions, "ADR Reports", 9);
 
 
 	mModuleTree->Expand(mPharmacy);
@@ -238,6 +239,7 @@ void ab::Modules::ReloadAccountDetails()
 	auto& pharmacy = app.mPharmacyManager.pharmacy;
 
 	auto cap = [&](const std::string& name) -> std::string {
+		if(name.empty()) return ""s;
 		std::string ret = name;
 		*ret.begin() = std::toupper(*ret.begin());
 		return ret;
@@ -354,10 +356,10 @@ bool ab::Modules::Search(std::vector<ab::mod>& hey, const wxTreeItemId& needle, 
 	return false;
 }
 
-bool ab::operator==(const wxTreeItemId& a, const wxTreeItemId& b)
-{
-	return (a == b);
-}
+//bool ab::operator==(const wxTreeItemId& a, const wxTreeItemId& b)
+//{
+//	return (a == b);
+//}
 
 std::size_t ab::hash_value(wxTreeItemId const& b)
 {

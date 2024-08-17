@@ -86,6 +86,7 @@ namespace ab {
 		//creation functions for test
 		void CreateAddress();
 
+		void CreateColourDatabase();
 		void CreateSecurityQuestions();
 		//send app ping to grape
 		bool SendPing();
@@ -98,6 +99,9 @@ namespace ab {
 
 		//server helpers
 		std::string ParseServerError(const grape::session::response_type& resp);
+
+		//icon 
+		wxIcon mAppIcon;
 
 	private:
 		bool LoadAppDetails();

@@ -347,6 +347,7 @@ namespace grape
 		class sizer {
 		public:
 			mutable size_t size = 0;
+			constexpr sizer() {}
 
 			template<Integers T>
 			constexpr void operator()(const T& i) const {
@@ -408,14 +409,14 @@ namespace grape
 			}
 
 			template<typename T, size_t N>
-			void operator()(const optional_field_set<T,N>& t) const {
+			constexpr void operator()(const optional_field_set<T,N>& t) const {
 				size += sizeof(opt_fields::value_type);
 			}
 
 			template<typename T, size_t N>
 				requires Integers<T> || FusionStruct<T> || Enums<T> || Pods<T>
 			|| std::is_same_v<T, std::string> || std::is_array_v<T> || std::is_same_v<T, std::chrono::system_clock::time_point>
-				void operator()(const optional_field<T, N>&field) const {
+				constexpr void operator()(const optional_field<T, N>&field) const {
 				if (field.has_value()) {
 					(*this)(field.value());
 				}
@@ -424,7 +425,7 @@ namespace grape
 			template<typename T>
 				requires Integers<T> || FusionStruct<T> || Enums<T> || Pods<T>
 			|| std::is_same_v<T, std::string> || std::is_array_v<T> || std::is_same_v<T, std::chrono::system_clock::time_point>
-				void operator()(const std::vector<T>&vec) const
+				constexpr void operator()(const std::vector<T>&vec) const
 			{
 				using type = std::decay_t<T>;
 				//the space for the size of the vector
@@ -442,7 +443,7 @@ namespace grape
 			}
 
 			template<Hashable H, typename T>
-			void operator()(const boost::unordered_flat_map<H, T>& map) const {
+			constexpr void operator()(const boost::unordered_flat_map<H, T>& map) const {
 				size += sizeof(std::uint32_t);
 				for (auto& i : map) {
 					(*this)(i.first);
@@ -578,7 +579,7 @@ namespace grape
 
 		template<typename T>
 			requires FusionStruct<T>
-		size_t get_size(const T& val) {
+		constexpr size_t get_size(const T& val) {
 			sizer s{};
 			boost::fusion::for_each(val, [&](const auto& i) {
 				s(i);

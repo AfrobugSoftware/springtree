@@ -25,7 +25,10 @@ bool ab::Application::OnInit()
 		wxArtProvider::Push(new ab::ArtProvider);
 
 		wxDialog::EnableLayoutAdaptation(true);
+		mAppIcon.CopyFromBitmap(wxArtProvider::GetBitmap("pharmaofficeico"));
 
+
+		CreateColourDatabase();
 		CreateSecurityQuestions();
 		auto logpath = fs::current_path() / ".logs" / "log.txt";
 		auto my_logger = spdlog::basic_logger_mt("springtree", logpath.string(), true);
@@ -51,7 +54,7 @@ bool ab::Application::OnInit()
 
 		}
 
-		mMainFrame = new ab::MainFrame(nullptr, wxID_ANY, wxDefaultPosition, wxSize(400, 400));
+		mMainFrame = new ab::MainFrame(nullptr, wxID_ANY, wxDefaultPosition, wxSize(822, 762));
 		mMainFrame->Show();
 		return true;
 	}
@@ -105,11 +108,59 @@ void ab::Application::DecorateSplashScreen(wxBitmap& bmp)
 
 bool ab::Application::LoadSettings()
 {
-	auto path = fs::current_path() / "settings.json";
-	if (!fs::exists(path)) {
-		//new installation, regesiter with grapejuice
-		return false;
+	auto path = fs::current_path() / ".data"s / "settings.json"s;
+	if (!fs::exists(path)) return false;
+	try {
+		std::fstream file(path, std::ios::in);
+		std::ostringstream os;
+		os << file.rdbuf();
 
+		//put a Busy wait here
+		
+		js::json settings = js::json::parse(os.str());
+		boost::uuids::uuid id = boost::lexical_cast<boost::uuids::uuid>(static_cast<std::string>(settings["pharmacy_id"]));
+
+		//update to getting pharmacy
+		//get pharmacy from grape juice
+		auto sess = std::make_shared<grape::session>(mNetManager.io(),mNetManager.ssl());
+		grape::session::request_type::body_type::value_type value(id.begin(), id.end());
+		auto fut = sess->req(http::verb::get, "/pharmacy/getbyid", std::move(value));
+		auto resp = fut.get();
+
+		if (resp.result() != http::status::ok) {
+			throw std::logic_error(ParseServerError(resp));
+		}
+
+		auto&& [p, buf] = grape::serial::read<grape::pharmacy>(boost::asio::buffer(resp.body()));
+		mPharmacyManager.pharmacy = std::forward<grape::pharmacy>(p);
+
+		//update to getting branch details
+		id = boost::lexical_cast<boost::uuids::uuid>(static_cast<std::string>(settings["branch_id"]));
+		grape::session::request_type::body_type::value_type value2(id.begin(), id.end());
+		fut = sess->req(http::verb::get, "/pharmacy/branch/getbyid", std::move(value2));
+		resp = fut.get();
+		if (resp.result() != http::status::ok) {
+			throw std::logic_error(ParseServerError(resp));
+		}
+
+		auto&& [br, buf2] = grape::serial::read<grape::branch>(boost::asio::buffer(resp.body()));
+		mPharmacyManager.branch = std::forward<grape::branch>(br);
+
+		//update to gettings address details
+		id = mPharmacyManager.branch.address_id;
+		grape::session::request_type::body_type::value_type value3(id.begin(), id.end());
+		fut = sess->req(http::verb::get, "/pharmacy/address", std::move(value3));
+		resp = fut.get();
+		if (resp.result() != http::status::ok) {
+			throw std::logic_error(ParseServerError(resp));
+		}
+
+		auto&& [ady, buf3] = grape::serial::read<grape::address>(boost::asio::buffer(resp.body()));
+		mPharmacyManager.address = std::forward<grape::address>(ady);
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(exp.what());
+		return false;
 	}
 	return true;
 }
@@ -127,6 +178,16 @@ void ab::Application::CreateAddress()
 	mAppAddress.lga = "isoko north";
 	mAppAddress.street = "dbs road";
 	mAppAddress.state = "delta";
+}
+
+void ab::Application::CreateColourDatabase()
+{
+	//wxTheColourDatabase->AddColour("module", wxColour(0xFF, 0xCA, 0x28, 50));
+	wxTheColourDatabase->AddColour("module", wxColour(0xFF, 0xFF, 0xFF, 50));
+	wxTheColourDatabase->AddColour("Aqua", wxColour(240, 255, 255));
+	wxTheColourDatabase->AddColour("Navajo_white", wxColour(255, 222, 173));
+	wxTheColourDatabase->AddColour("Tomato", wxColour(255, 99, 71));
+	wxTheColourDatabase->AddColour("Papaya whip", wxColour(255, 239, 213));
 }
 
 void ab::Application::CreateSecurityQuestions()

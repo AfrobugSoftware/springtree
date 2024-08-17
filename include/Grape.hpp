@@ -54,6 +54,12 @@ namespace grape {
 		drf,
 		educational
 	};
+
+	enum class branch_state : std::uint32_t {
+		open,
+		closed,
+		shutdown,
+	};
 };
 
 //branches
@@ -64,7 +70,7 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(boost::uuids::uuid, address_id)
 	(std::string, name)
 	(grape::branch_type, type)
-	(std::uint32_t, state)
+	(grape::branch_state, state)
 	(std::string, info)
 )
 

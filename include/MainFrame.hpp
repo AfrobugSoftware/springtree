@@ -7,8 +7,14 @@
 #include <date/date.h>
 #include <wx/aboutdlg.h>
 
+#include <chrono>
+#include <fmt/chrono.h>
+#include <format>
+
+
 #include "Workspace.hpp"
 #include "Module.hpp"
+#include "AuiTheme.hpp"
 
 namespace ab {
 	class MainFrame : public wxFrame
@@ -27,6 +33,8 @@ namespace ab {
 		enum {
 			ID_MODULE = wxID_HIGHEST + 10,
 			ID_WORKSPACE,
+			ID_PAGER,
+			ID_ABOUT,
 		};
 
 
@@ -34,23 +42,32 @@ namespace ab {
 		MainFrame(wxWindow* parent, wxWindowID id, const wxPoint& position, const wxSize& size);
 		virtual ~MainFrame();
 
+		void SetupAuiTheme();
 		void CreateMenubar();
+		void CreateToolbar();
+
 		void CreateModules();
 		void CreateWorkspace();
-		void CreateeWelcomePage();
+		void CreateWelcomePage();
 		void CreateSelectList();
+		void CreateImageList();
 	private:
 		void OnWelcomePageSelect(wxListEvent& evt);
 		void OnAbout(wxCommandEvent& evt);
-
+		void OnIdle(wxIdleEvent& evt);
 
 		//signals
+		void OnModuleActivated(const ab::mod& mod, ab::module_evt evt);
 		void OnWorkspaceNotif(ab::Workspace::notif notif, size_t page);
+		void OnAuiThemeChange();
 
 		wxStaticText* time1 = nullptr;
 		wxStaticText* date1 = nullptr;
 		wxStaticText* pharmName = nullptr;
 
+		wxAuiManager mManager;
+		wxAuiToolBar* mToolbar = nullptr;
+		wxImageList* mImageList = nullptr;
 		wxListCtrl* mSelectList = nullptr;
 		wxSimplebook* mPager = nullptr;
 		wxPanel* mWelcomePage = nullptr;

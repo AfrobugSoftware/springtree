@@ -44,6 +44,7 @@
 #include <sstream>
 #include <chrono>
 #include <algorithm>
+#include <optional>
 
 #include <vector>
 #include <mutex>
@@ -126,19 +127,19 @@ namespace pof {
 					else {
 						if (m_connected.load()) {
 							boost::asio::co_spawn(m_stream.get_executor(), run(), [this_ = this->shared_from_this()](std::exception_ptr eptr, response_type res) {
-								if (eptr) this_->m_promise.set_exception(eptr);
-								else this_->m_promise.set_value(res);
+								if (eptr) this_->m_promise->set_exception(eptr);
+								else this_->m_promise->set_value(res);
 							});
 						}
 						else {
 							boost::asio::co_spawn(m_stream.get_executor(), run(m_globalendpoint), [this_ = this->shared_from_this()](std::exception_ptr eptr, response_type res) {
-								if (eptr) this_->m_promise.set_exception(eptr);
-								else this_->m_promise.set_value(res);
+								if (eptr) this_->m_promise->set_exception(eptr);
+								else this_->m_promise->set_value(res);
 							});
 						}
 					}
-
-					return (m_promise.get_future());
+					m_promise.emplace();
+					return (m_promise->get_future());
 				}
 
 				void cancel() {
@@ -160,8 +161,8 @@ namespace pof {
 						on_fail(code);
 					}
 					co_spawn(m_stream.get_executor(), run(std::move(results)), [&](std::exception_ptr ptr, response_type resp) {
-							if (ptr) m_promise.set_exception(ptr);
-							else m_promise.set_value(resp);
+							if (ptr) m_promise->set_exception(ptr);
+							else m_promise->set_value(resp);
 					});
 				}
 				awaitable<response_type> run(tcp::resolver::results_type results)
@@ -189,6 +190,7 @@ namespace pof {
 					if (ec) {
 						on_fail(ec);
 					}
+					m_connected.store(true);
 
 					//write
 					beast::get_lowest_layer(m_stream).expires_after(m_dur);
@@ -230,6 +232,7 @@ namespace pof {
 					if (ec) {
 						on_fail(ec);
 					}
+					m_connected.store(true);
 
 					//write
 					beast::get_lowest_layer(m_stream).expires_after(m_dur);
@@ -330,6 +333,7 @@ namespace pof {
 
 					}
 					//ignore all other bodies for now
+					m_resp = {};
 				}
 
 				net::io_context& m_io;
@@ -343,7 +347,7 @@ namespace pof {
 				response_type m_resp;
 				std::chrono::steady_clock::duration m_dur;
 
-				promise_t m_promise;
+				std::optional<promise_t> m_promise;
 
 			};
 		}

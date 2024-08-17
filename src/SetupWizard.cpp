@@ -57,6 +57,7 @@ void ab::SetupWizard::OnFinished(wxWizardEvent& evt)
 
 void ab::SetupWizard::OnPageChanging(wxWizardEvent& evt)
 {
+    auto& app = wxGetApp();
     auto page = evt.GetPage();
     if (page == mSelectPharmacyPage && evt.GetDirection()) {
         if (pharmacy.id.is_nil())
@@ -65,29 +66,79 @@ void ab::SetupWizard::OnPageChanging(wxWizardEvent& evt)
             evt.Veto();
         }
     }
-    if (page == mSelectBranchPage && evt.GetDirection()) {
+    else if (page == mSelectBranchPage && evt.GetDirection()) {
         if (branch.id.is_nil()) {
             wxMessageBox("No branch selected", "Setup", wxICON_WARNING | wxOK);
             evt.Veto();
         }
     }
-    if (page == mAccountEntryPage && evt.GetDirection()) {
+    else if (page == mAccountEntryPage && evt.GetDirection()) {
         auto p = mPasswordValue->GetValue().ToStdString();
         auto c = mConfirmPasswordValue->GetValue().ToStdString();
         if (!boost::iequals(p, c)) {
             wxMessageBox("Password mismatch, please check password", "Setup", wxICON_WARNING | wxOK);
             evt.Veto();
         }
-    }if (page == mAccountPersonalDetailsPage && evt.GetDirection()) {
+    }
+    else if (page == mAccountPersonalDetailsPage && evt.GetDirection()) {
         auto date = mDobValue->GetValue();
         auto now = wxDateTime::Now();
         if ((now.GetYear() - date.GetYear()) < 18) {
             wxMessageBox("Too young to create an acccount", "Setup", wxICON_WARNING | wxOK);
             evt.Veto();
         }
-    }if (page == mFirstPage && evt.GetDirection()) {
-        
+    }
+    else if (page == mFirstPage && evt.GetDirection()) {
+        std::string pharmname = mPharmacyNameValue->GetValue().ToStdString();
+        boost::trim(pharmname);
+        boost::to_lower(pharmname);
 
+        auto target = fmt::format("/pharmacy/checkname/{}", pharmname);
+        auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+        auto fut = sess->req(http::verb::get, target, {});
+        grape::session::response_type resp;
+
+        try {
+            {
+                wxBusyInfo wait("Checking pharmacy name\nPlease wait...");
+                resp = fut.get();
+            }
+            if (resp.result() == http::status::ok) {
+                wxMessageBox("Pharmacy name already exists, please try another name", "Setup", wxICON_INFORMATION |wxOK);
+                evt.Veto();
+            }
+        }
+        catch (const std::exception& exp) {
+            wxMessageBox(exp.what(), "Setup", wxICON_ERROR | wxOK);
+            evt.Veto();
+        }
+
+    }
+    else if (page == mBranchPage && evt.GetDirection() &&
+         stype == setup_type::create_branch) {
+        std::string branchname = mBranchNameValue->GetValue().ToStdString();
+        boost::trim(branchname);
+        boost::to_lower(branchname);
+
+        auto target = fmt::format("/pharmacy/branch/checkname/{}", branchname);
+        auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+        auto fut = sess->req(http::verb::get, target,
+            grape::session::request_type::body_type::value_type(pharmacy.id.begin(), pharmacy.id.end()));
+        grape::session::response_type resp;
+        try {
+            {
+                wxBusyInfo wait("Checking branch name\nPlease wait...");
+                resp = fut.get();
+            }
+            if (resp.result() == http::status::ok) {
+                wxMessageBox("Branch name already exists in pharmacy\nPlease try another name", "Setup", wxICON_INFORMATION | wxOK);
+                evt.Veto();
+            }
+        }
+        catch (const std::exception& exp) {
+            wxMessageBox(exp.what(), "Setup", wxICON_ERROR | wxOK);
+            evt.Veto();
+        }
     }
 }
 
@@ -185,6 +236,7 @@ bool ab::SetupWizard::TransferDataFromWindow()
         case setup_type::create_branch:
         {
             app.mPharmacyManager.branch.pharmacy_id = pharmacy.id;
+            app.mPharmacyManager.branch.address_id = pharmacy.address_id;
             
             app.mPharmacyManager.branch.name = mBranchNameValue->GetValue().ToStdString();
             format(app.mPharmacyManager.branch.name);
@@ -199,7 +251,7 @@ bool ab::SetupWizard::TransferDataFromWindow()
         {
             app.mPharmacyManager.pharmacy = pharmacy;
             app.mPharmacyManager.branch = branch;
-            app.mPharmacyManager.GetBranchAddress();
+            app.mPharmacyManager.address = app.mPharmacyManager.GetBranchAddress();
 
             return true;
         }
@@ -268,9 +320,7 @@ bool ab::SetupWizard::CreateAppSettings()
         if (!fs::is_directory(fpath)) {
             fs::create_directory(fpath);
         }
-
         fpath /= "settings.json"s;
-        if (fs::exists(fpath)) return true;
  
         mSettings["pharmacy_id"] = boost::lexical_cast<std::string>(app.mPharmacyManager.pharmacy.id);
         mSettings["pharmacy_name"] = app.mPharmacyManager.pharmacy.name;
@@ -430,7 +480,7 @@ void ab::SetupWizard::CreateSelectPharmacy()
             grape::session::request_type::body_type::value_type body(grape::serial::get_size(uid), 0x00);
             grape::serial::write(boost::asio::buffer(body), uid);
 
-            auto fut = sess->req(http::verb::get, "/pharmacy/getpharmacybyid", std::move(body));
+            auto fut = sess->req(http::verb::get, "/pharmacy/getbyid", std::move(body));
 
 
             //how do I wait for this
@@ -873,7 +923,7 @@ void ab::SetupWizard::CreateSelectBranchPage()
             grape::session::request_type::body_type::value_type body(grape::serial::get_size(uid), 0x00);
             grape::serial::write(boost::asio::buffer(body), uid);
 
-            auto fut = sess->req(http::verb::get, "/pharmacy/getbranchesid", std::move(body));
+            auto fut = sess->req(http::verb::get, "/pharmacy/branch/getbyid", std::move(body));
 
 
             //how do I wait for this

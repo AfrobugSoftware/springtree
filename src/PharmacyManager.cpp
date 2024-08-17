@@ -45,7 +45,7 @@ bool ab::PharmacyManager::CreateBranch()
 		auto buf = grape::serial::write(boost::asio::buffer(body), branch);
 		grape::serial::write(buf, address);
 
-		auto fut = sess->req(http::verb::post, "/pharmacy/createbranch", std::move(body));
+		auto fut = sess->req(http::verb::post, "/pharmacy/branch/create", std::move(body));
 
 		auto resp = fut.get();
 		if (resp.result() != http::status::created) {
@@ -69,7 +69,7 @@ grape::collection_type<grape::pharmacy> ab::PharmacyManager::GetPharmacies()
 	try {
 		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), 
 			app.mNetManager.ssl());
-		auto fut = sess->req(http::verb::get, "/pharmacy/getpharmacies", {});
+		auto fut = sess->req(http::verb::get, "/pharmacy/get", {});
 		auto resp = fut.get();
 		if (resp.result() != http::status::ok) {
 			throw std::logic_error(app.ParseServerError(resp));
@@ -107,7 +107,7 @@ grape::collection_type<grape::branch> ab::PharmacyManager::GetBranches(const boo
 		auto buf = grape::serial::write(boost::asio::buffer(sbody), id);
 		grape::serial::write(buf, pg);
 
-		auto fut = sess->req(http::verb::get, "/pharmacy/getbranches",std::move(sbody), 30s);
+		auto fut = sess->req(http::verb::get, "/pharmacy/branch/get",std::move(sbody), 30s);
 		auto resp = fut.get();
 		if (resp.result() != http::status::ok) {
 			throw std::logic_error(app.ParseServerError(resp));

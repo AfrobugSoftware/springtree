@@ -1,15 +1,14 @@
 #pragma once
 #include "wx/frame.h"
 #include "wx/stattext.h"
-#include "wx/log.h"
 #include "wx/app.h"
 #include "wx/checkbox.h"
 #include "wx/checklst.h"
 #include "wx/msgdlg.h"
 #include "wx/radiobox.h"
-#include "wx/menu.h"
 #include "wx/sizer.h"
 
+#include <wx/aui/framemanager.h>
 #include "wx/textctrl.h"
 #include "wx/wizard.h"
 #include <wx/config.h>
@@ -21,6 +20,8 @@
 #include <wx/dataview.h>
 #include <wx/simplebook.h>
 #include <wx/datectrl.h>
+#include <wx/popupwin.h>
+#include <wx/busyinfo.h>
 
 #include "Application.hpp"
 #include "../base/bcrypt/include/bcrypt.h"

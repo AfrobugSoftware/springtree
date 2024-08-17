@@ -1,29 +1,107 @@
 #include "MainFrame.hpp"
 #include "Application.hpp"
+BEGIN_EVENT_TABLE(ab::MainFrame, wxFrame)
+	EVT_MENU(ab::MainFrame::ID_ABOUT, ab::MainFrame::OnAbout)
+END_EVENT_TABLE()
+
 
 ab::MainFrame::MainFrame()
 {
 }
 
 ab::MainFrame::MainFrame(wxWindow* parent, wxWindowID id, const wxPoint& position, const wxSize& size)
- : wxFrame(parent, id, "PharmaOffice - enterprise", position, size) {
+ : wxFrame(parent, id, "PharmaOffice - Enterprice", position, size), mManager(this, ab::AuiTheme::AUIMGRSTYLE){
 	SetSize(FromDIP(size));
+	SetupAuiTheme();
+	CreateMenubar();
+
+	mPager = new wxSimplebook(this, ID_PAGER);
+	CreateModules();
+	
+	CreateWelcomePage();
+	CreateWorkspace();
+	CreateImageList();
+
+	mPager->AddPage(mWelcomePage, "Welcome", true);
+	mPager->AddPage(mWorkspace, "Workspace", false);
+	mManager.AddPane(mPager, wxAuiPaneInfo().Name("Pager").CaptionVisible(false).CenterPane().Show());
 
 
-
+	mManager.Update();
+	SetIcon(wxGetApp().mAppIcon);
 }
 
 ab::MainFrame::~MainFrame()
 {
+	delete mImageList;
+	mImageList = nullptr;
+
+	mManager.UnInit();
+}
+
+void ab::MainFrame::SetupAuiTheme()
+{
+	auto artProvider = mManager.GetArtProvider();
+	//pass the art provider to a place where it gets its settings from?
+	ab::AuiTheme::Update(artProvider);
+	ab::AuiTheme::Register(std::bind_front(&ab::MainFrame::OnAuiThemeChange, this));
 }
 
 void ab::MainFrame::CreateMenubar()
+{
+	constexpr const size_t MenuCount = 8;
+	auto Menus = std::array<wxMenu*, MenuCount>{
+		new wxMenu,
+		new wxMenu,
+		new wxMenu,
+		new wxMenu,
+		new wxMenu,
+		new wxMenu,
+		new wxMenu,
+		new wxMenu
+	};
+
+	auto MenuTitle = std::array<wxString, MenuCount>{
+		"Accounts",
+		"Pharmacy",
+		"Products",
+		"Formulary",
+		"Prescriptions",
+		"View",
+		"Extentions",
+		"Help"
+	};
+
+
+	wxMenuBar* bar = new wxMenuBar(MenuCount, Menus.data(), MenuTitle.data());
+	SetMenuBar(bar);
+}
+
+void ab::MainFrame::CreateToolbar()
 {
 
 }
 
 void ab::MainFrame::CreateModules()
 {
+	mModules = new ab::Modules(this, ID_MODULE, wxDefaultPosition, FromDIP(wxSize(548, -1)), wxTAB_TRAVERSAL);
+	mManager.AddPane(mModules, wxAuiPaneInfo().Name("Modules").CaptionVisible(false).Left().PaneBorder().BottomDockable(false).Floatable(false).TopDockable(false).Show());
+
+	ab::mod mod;
+	mod.callback = std::bind_front(&ab::MainFrame::OnModuleActivated, this);
+	mod.win = nullptr;
+	mod.name = "Products";
+	mod.img = 0;
+	mod.id = mModules->mProducts;
+	mModules->Add(std::move(mod));
+
+	mod = ab::mod{};
+	mod.callback = std::bind_front(&ab::MainFrame::OnModuleActivated, this);
+	mod.win = nullptr;
+	mod.name = "Sales";
+	mod.img = 1;
+	mod.id = mModules->mProducts;
+	mModules->Add(std::move(mod));
 }
 
 void ab::MainFrame::CreateWorkspace()
@@ -32,7 +110,7 @@ void ab::MainFrame::CreateWorkspace()
 	mWorkspace->notifsignal.connect(std::bind_front(&ab::MainFrame::OnWorkspaceNotif, this));
 }
 
-void ab::MainFrame::CreateeWelcomePage()
+void ab::MainFrame::CreateWelcomePage()
 {
 	auto& app = wxGetApp();
 	auto cap = [&](const std::string& name) -> std::string {
@@ -63,17 +141,15 @@ void ab::MainFrame::CreateeWelcomePage()
 	bSizer9->Add(0, 0, 1, wxEXPAND, FromDIP(5));
 
 	auto today = std::chrono::system_clock::now();
-	std::string todayTime = fmt::format("{:%H:%M}", today);
+	std::string todayTime = std::format("{:%H:%M}", today);
 	std::chrono::sys_days dt = std::chrono::time_point_cast<std::chrono::sys_days::duration>(today);
 	std::chrono::year_month_day ymd{ dt };
 	std::chrono::weekday wk{ dt };
 
 
 	std::stringstream os;
-	os << fmt::format("{:%d} {}, {} {:%Y}", dt, dayNames[wk.c_encoding()],
+	os << fmt::format("{:%d} {}, {} {:%y}", dt, dayNames[wk.c_encoding()],
 		monthNames[(std::uint32_t)ymd.month() - 1], dt);
-
-
 
 	time1 = new wxStaticText(m7, wxID_ANY, todayTime, wxDefaultPosition, wxDefaultSize, 0);
 	time1->SetFont(wxFontInfo(64).AntiAliased().Family(wxFONTFAMILY_SWISS));
@@ -98,7 +174,7 @@ void ab::MainFrame::CreateeWelcomePage()
 	wxPanel* tt = new wxPanel(m7, wxID_ANY);
 	auto bsz = new wxBoxSizer(wxHORIZONTAL);
 
-	mSelectList = new wxListCtrl(tt, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(380, 300)), wxLC_ICON | wxLC_SINGLE_SEL | wxLC_AUTOARRANGE | wxFULL_REPAINT_ON_RESIZE | wxLC_EDIT_LABELS | wxNO_BORDER);
+	mSelectList = new wxListCtrl(tt, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(340, 300)), wxLC_ICON | wxLC_SINGLE_SEL | wxLC_AUTOARRANGE | wxFULL_REPAINT_ON_RESIZE | wxLC_EDIT_LABELS | wxNO_BORDER);
 	CreateSelectList();
 
 	bsz->AddStretchSpacer();
@@ -175,6 +251,27 @@ void ab::MainFrame::CreateSelectList()
 	mSelectList->Bind(wxEVT_LIST_ITEM_ACTIVATED, std::bind_front(&ab::MainFrame::OnWelcomePageSelect, this));
 }
 
+void ab::MainFrame::CreateImageList()
+{
+	mImageList = new wxImageList(FromDIP(16), FromDIP(16));
+
+	mImageList->Add(wxArtProvider::GetBitmap("store_tree", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("payments", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("heart_plus", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("shopping_bag", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("home", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("bar_chart", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("inventory", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("menu_book", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("monitoring", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("sprint", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("cases", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	mImageList->Add(wxArtProvider::GetBitmap("account_circle", wxART_OTHER, FromDIP(wxSize(16, 16))));
+
+	mWorkspace->SetImageList(mImageList);
+	mModules->SetImageList(mImageList);
+}
+
 void ab::MainFrame::OnWelcomePageSelect(wxListEvent& evt)
 {
 	int sel = evt.GetSelection();
@@ -210,6 +307,57 @@ void ab::MainFrame::OnAbout(wxCommandEvent& evt)
 	wxAboutBox(info);
 }
 
+void ab::MainFrame::OnIdle(wxIdleEvent& evt)
+{
+	int sel = mPager->GetSelection();
+	if (sel == wxNOT_FOUND) return;
+
+	switch (sel)
+	{
+	case WELCOME:
+	{
+		auto today = std::chrono::system_clock::now();
+	
+
+		std::chrono::sys_days dt = std::chrono::time_point_cast<std::chrono::sys_days::duration>(today);
+		std::string todayTime  = fmt::format("{:%h:%m}"s, today);
+		std::chrono::year_month_day ymd{ dt };
+		std::chrono::weekday wk{ dt };
+
+
+		std::stringstream os;
+		os << fmt::format("{:%d} {}, {} {:%y}", dt, dayNames[wk.c_encoding()],
+			monthNames[(std::uint32_t)ymd.month() - 1], dt);
+
+		time1->Freeze();
+		time1->SetLabelText(todayTime);
+		time1->Thaw();
+		time1->Refresh();
+
+		date1->Freeze();
+		date1->SetLabelText(os.str());
+		date1->Thaw();
+		date1->Refresh();
+
+		mWelcomePage->Layout();
+	}
+	default:
+		break;
+	}
+}
+
+void ab::MainFrame::OnModuleActivated(const ab::mod& mod, ab::module_evt evt)
+{
+	if (evt == ab::module_evt::activated) {
+		if (mod.win != nullptr) {
+			mWorkspace->AddSpace(mod.win,
+				mod.name, mod.img);
+		}
+	}
+	if (mPager->GetSelection() == WELCOME)
+		mPager->SetSelection(WORKSPACE);
+}
+
 void ab::MainFrame::OnWorkspaceNotif(ab::Workspace::notif notif, size_t page)
 {
 	switch (notif) {
@@ -219,4 +367,11 @@ void ab::MainFrame::OnWorkspaceNotif(ab::Workspace::notif notif, size_t page)
 		}
 		break;
 	}
+}
+
+void ab::MainFrame::OnAuiThemeChange()
+{
+	auto auiArt = mManager.GetArtProvider();
+	ab::AuiTheme::Update(auiArt);
+	mManager.Update();
 }
