@@ -524,6 +524,7 @@ bool ab::SignIn::TransferDataFromWindow()
 		sess_settings["session_start_time"] = static_cast<std::uint64_t>(app.mPharmacyManager.account.session_start_time.value().time_since_epoch().count());
 
 		app.settings["session"] = sess_settings;
+		
 		return true;
 	}
 	catch (const std::exception& exp) {
