@@ -67,13 +67,19 @@ namespace ab {
 			return boost::fusion::at_c<2>((*this)[row]);
 		}
 
-		void Reload(std::vector<T>&& items) {
-			vec_base::clear();
+		void Reload( const std::vector<T>& items) {
+			Clear();
 			for (auto&& i : items) {
 				typename vec_base::value_type v{};
 				boost::fusion::at_c<2>(v) = std::move(i);
 			}
 			Reset(items.size());
+		}
+
+
+		void Clear() {
+			vec_base::clear();
+			Cleared();
 		}
 
 		virtual void GetValueByRow(wxVariant& variant, unsigned int row, unsigned int col) const override
@@ -187,7 +193,7 @@ namespace ab {
 						}
 					}
 					else if constexpr (std::is_same_v<arg_type, pof::base::currency>) {
-						auto string = variant.GetString();
+						auto string = variant.GetString().ToStdString();
 						v = pof::base::currency(string);
 					}
 					else if constexpr (std::is_same_v<std::string, arg_type>){

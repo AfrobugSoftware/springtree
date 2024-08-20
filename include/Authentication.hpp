@@ -14,6 +14,11 @@
 #include <wx/msgdlg.h>
 #include <wx/hyperlink.h>
 #include <wx/statbmp.h>
+#include <wx/busyinfo.h>
+
+#include <boost/algorithm/string.hpp>
+#include <../base/bcrypt/include/bcrypt.h>
+#include "Grape.hpp"
 
 namespace ab {
 	class Register : public wxDialog {
@@ -50,10 +55,19 @@ namespace ab {
 		wxButton* m_sdbSizer3Cancel = nullptr;
 		wxFlexGridSizer* fgSizer1 = nullptr;
 
+		enum {
+			ID_SHOW_PASSWORD = wxID_HIGHEST + 4500,
+			ID_ACCOUNT_TYPE,
 
+		};
 		Register(wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = wxT("Registration"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize(848, 584), long style = wxDEFAULT_DIALOG_STYLE);
 		virtual ~Register();
+
+		void OnClose(wxCloseEvent& evt);
+		void OnShowPassword(wxCommandEvent& evt);
 		virtual bool TransferDataFromWindow() override;
+
+		DECLARE_EVENT_TABLE()
 	};
 
 
@@ -75,7 +89,6 @@ namespace ab {
 		wxPanel* m_panel4 = nullptr;
 	public:
 		enum {
-			ID_LOGON,
 			ID_SIGNUP,
 			ID_FORGOT_PASS,
 			ID_HELP,
@@ -84,6 +97,11 @@ namespace ab {
 		SignIn(wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = wxEmptyString, const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize(848, 584), long style = wxDEFAULT_DIALOG_STYLE);
 		virtual ~SignIn();
 
+		void OnClose(wxCloseEvent& evt);
+		void OnSignUp(wxCommandEvent& evt);
+		void OnForgotPassword(wxHyperlinkEvent& evt);
 		virtual bool TransferDataFromWindow() override;
+
+		DECLARE_EVENT_TABLE()
 	};
 };

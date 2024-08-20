@@ -104,7 +104,7 @@ void ab::SetupWizard::OnPageChanging(wxWizardEvent& evt)
                 resp = fut.get();
             }
             if (resp.result() == http::status::ok) {
-                wxMessageBox("Pharmacy name already exists, please try another name", "Setup", wxICON_INFORMATION |wxOK);
+                wxMessageBox("Pharmacy name already exists, please try another name", "Setup", wxICON_WARNING |wxOK);
                 evt.Veto();
             }
         }
@@ -131,7 +131,7 @@ void ab::SetupWizard::OnPageChanging(wxWizardEvent& evt)
                 resp = fut.get();
             }
             if (resp.result() == http::status::ok) {
-                wxMessageBox("Branch name already exists in pharmacy\nPlease try another name", "Setup", wxICON_INFORMATION | wxOK);
+                wxMessageBox("Branch name already exists in pharmacy\nPlease try another name", "Setup", wxICON_WARNING | wxOK);
                 evt.Veto();
             }
         }
@@ -326,7 +326,6 @@ bool ab::SetupWizard::CreateAppSettings()
         mSettings["pharmacy_name"] = app.mPharmacyManager.pharmacy.name;
         mSettings["branch_id"] = boost::lexical_cast<std::string>(app.mPharmacyManager.branch.id);
         mSettings["branch_name"] = app.mPharmacyManager.branch.name;
-       // mSettings["branch_type"] = app.mPharmacyManager.branch.type;
         mSettings["address_id"] = app.mPharmacyManager.address.id;
 
 
@@ -551,7 +550,7 @@ void ab::SetupWizard::CreateSelectPharmacy()
 
     wxPanel* emptyPanel = nullptr;
     wxButton* btn = nullptr;
-    std::tie(emptyPanel, mPharmEmptyText, btn) = app.CreateEmptyPanel(mPharmBook, "No internet connection", wxART_ERROR, wxART_MESSAGE_BOX);
+    std::tie(emptyPanel, mPharmEmptyText, btn) = app.CreateEmptyPanel(mPharmBook, "No internet connection", wxART_ERROR, wxSize(48,48), wxART_MESSAGE_BOX);
 
     btn->SetBitmap(wxArtProvider::GetBitmap(wxART_REFRESH, wxART_BUTTON, FromDIP(wxSize(16, 16))));
     btn->SetLabel("Try again"s);
@@ -988,7 +987,7 @@ void ab::SetupWizard::CreateSelectBranchPage()
 
     wxPanel* panel2 = nullptr;
     wxButton* btn = nullptr;
-    std::tie(panel2, mBranchEmptyText, btn) = app.CreateEmptyPanel(mBranchBook, "No internet connection", wxART_ERROR, wxART_MESSAGE_BOX);
+    std::tie(panel2, mBranchEmptyText, btn) = app.CreateEmptyPanel(mBranchBook, "No internet connection", wxART_ERROR, wxSize(48,48), wxART_MESSAGE_BOX);
 
     btn->SetBitmap(wxArtProvider::GetBitmap(wxART_REFRESH, wxART_BUTTON, FromDIP(wxSize(16, 16))));
     btn->SetLabel("Try again"s);

@@ -26,6 +26,7 @@
 #include "MainFrame.hpp"
 #include "PharmacyManager.hpp"
 #include "ArtProvider.hpp"
+#include "Authentication.hpp"
 
 #include "net.h"
 #include "netmanager.h"
@@ -93,7 +94,7 @@ namespace ab {
 		wxTimer mPingTime;
 
 		//panel helpers 
-		std::tuple<wxPanel*, wxStaticText*, wxButton* > CreateEmptyPanel(wxWindow* parent, const std::string& text, const std::string& img = ""s, const std::string& client = wxART_OTHER);
+		std::tuple<wxPanel*, wxStaticText*, wxButton* > CreateEmptyPanel(wxWindow* parent, const std::string& text, const std::string& img = ""s, const wxSize& size = wxSize(48, 48), const std::string& client = wxART_OTHER);
 		std::pair<wxPanel*, wxActivityIndicator*> CreateWaitPanel(wxWindow* parent, const std::string& text);
 
 
@@ -102,7 +103,7 @@ namespace ab {
 
 		//icon 
 		wxIcon mAppIcon;
-
+		js::json settings;
 	private:
 		bool LoadAppDetails();
 

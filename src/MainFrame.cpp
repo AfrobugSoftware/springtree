@@ -100,7 +100,7 @@ void ab::MainFrame::CreateModules()
 	mod.win = nullptr;
 	mod.name = "Sales";
 	mod.img = 1;
-	mod.id = mModules->mProducts;
+	mod.id = mModules->mSales;
 	mModules->Add(std::move(mod));
 }
 
@@ -274,7 +274,7 @@ void ab::MainFrame::CreateImageList()
 
 void ab::MainFrame::OnWelcomePageSelect(wxListEvent& evt)
 {
-	int sel = evt.GetSelection();
+	int sel = evt.GetItem().GetId();
 	if (sel == wxNOT_FOUND) return;
 
 	switch (sel)

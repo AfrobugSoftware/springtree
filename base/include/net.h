@@ -149,9 +149,7 @@ namespace pof {
 
 				void on_fail(std::error_code code)
 				{
-					spdlog::error("Error: {}", code.message());
-					m_connected.store(false);
-					m_stream.shutdown();
+					if (m_connected.load()) m_stream.shutdown();
 					throw std::system_error(code);
 				}
 

@@ -24,6 +24,10 @@ bool ab::Application::OnInit()
 		wxInitAllImageHandlers();
 		wxArtProvider::Push(new ab::ArtProvider);
 
+		wxSystemOptions::SetOption(wxT("msw.remap"), 1);
+		wxSystemOptions::SetOption(wxT("msw.staticbox.optimized-paint"), 1);
+
+
 		wxDialog::EnableLayoutAdaptation(true);
 		mAppIcon.CopyFromBitmap(wxArtProvider::GetBitmap("pharmaofficeico"));
 
@@ -46,12 +50,20 @@ bool ab::Application::OnInit()
 			wizard->Destroy();
 			delete wizard;
 			
-
 			if (!state) {
 				OnExit();
 				return false;
 			}
 
+		}
+		//did not sign in from session
+		if (mPharmacyManager.account.account_id.is_nil()) {
+			ab::SignIn sin(nullptr);
+			if (sin.ShowModal() != wxID_OK) {
+				//NOT SIGNED IN 
+				OnExit();
+				return false;
+			}
 		}
 
 		mMainFrame = new ab::MainFrame(nullptr, wxID_ANY, wxDefaultPosition, wxSize(822, 762));
@@ -117,7 +129,7 @@ bool ab::Application::LoadSettings()
 
 		//put a Busy wait here
 		
-		js::json settings = js::json::parse(os.str());
+		settings = js::json::parse(os.str());
 		boost::uuids::uuid id = boost::lexical_cast<boost::uuids::uuid>(static_cast<std::string>(settings["pharmacy_id"]));
 
 		//update to getting pharmacy
@@ -157,6 +169,35 @@ bool ab::Application::LoadSettings()
 
 		auto&& [ady, buf3] = grape::serial::read<grape::address>(boost::asio::buffer(resp.body()));
 		mPharmacyManager.address = std::forward<grape::address>(ady);
+
+		//sign in from session
+		auto s = settings.find("session");
+		if (s != settings.end()) {
+			//only sign in from session if the user asked to remeber them
+			if (!static_cast<bool>((*s)["remember_me"])) return true;
+
+			grape::session_cred cred;
+			cred.session_id = boost::lexical_cast<boost::uuids::uuid>(static_cast<std::string>((*s)["id"]));
+			cred.session_start_time = std::chrono::system_clock::time_point(
+				std::chrono::system_clock::duration(static_cast<std::uint64_t>((*s)["session_start_time"])));
+
+			constexpr const size_t size = grape::serial::get_size(cred);
+			grape::session::request_type::body_type::value_type body(size, 0x00);
+			grape::serial::write(boost::asio::buffer(body), cred);
+
+			fut = sess->req(http::verb::post, "/account/signinfromsession", std::move(body));
+			resp = fut.get();
+			if (resp.result() != http::status::ok) {
+#ifdef _DEBUG
+				throw std::logic_error(ParseServerError(resp));
+#else 
+				return true;
+#endif
+			}
+
+			auto&& [acc, buf] = grape::serial::read<grape::account>(boost::asio::buffer(body));
+			mPharmacyManager.account = std::forward<grape::account>(acc);
+		}
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());
@@ -167,7 +208,18 @@ bool ab::Application::LoadSettings()
 
 bool ab::Application::SaveSettings()
 {
-	return false;
+	try {
+		auto fpath = fs::current_path() / ".data"s / "settings.json";
+		std::fstream file(fpath, std::ios::out);
+		if (!file.is_open()) throw std::logic_error("failed to create settings file");
+		file << settings.dump();
+		file.close();
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(exp.what());
+		return false;
+	}
+	return true;
 }
 
 void ab::Application::CreateAddress()
@@ -220,7 +272,8 @@ bool ab::Application::SendPing()
 	return false;
 }
 
-std::tuple<wxPanel*, wxStaticText*, wxButton*> ab::Application::CreateEmptyPanel(wxWindow* parent, const std::string& text, const std::string& img, const std::string& client)
+std::tuple<wxPanel*, wxStaticText*, wxButton*> ab::Application::CreateEmptyPanel(wxWindow* parent, const std::string& text, 
+	const std::string& img, const wxSize& size, const std::string& client)
 {
 	wxPanel * mEmpty = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
 	wxBoxSizer* bSizer6;
@@ -240,7 +293,7 @@ std::tuple<wxPanel*, wxStaticText*, wxButton*> ab::Application::CreateEmptyPanel
 
 	bSizer9->Add(0, 0, 1, wxEXPAND, 5);
 
-	wxStaticBitmap* b1 = new wxStaticBitmap(m7, wxID_ANY, wxArtProvider::GetBitmap(img, client), wxDefaultPosition, wxDefaultSize, 0);
+	wxStaticBitmap* b1 = new wxStaticBitmap(m7, wxID_ANY, wxArtProvider::GetBitmap(img, client, mEmpty->FromDIP(size)), wxDefaultPosition, wxDefaultSize, 0);
 	bSizer9->Add(b1, 0, wxALIGN_CENTER_HORIZONTAL | wxALIGN_CENTER_VERTICAL | wxALL, 5);
 
 	wxStaticText* mEmptyStr = new wxStaticText(m7, wxID_ANY, text, wxDefaultPosition, wxDefaultSize, 0);

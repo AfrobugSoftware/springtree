@@ -362,6 +362,7 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(std::chrono::year_month_day, dob)
 	(std::string, phonenumber)
 	(std::string, email)
+	(std::string, regnumber)
 	(std::string, username)
 	(grape::opt_fields, fields)
 	(grape::opt_hash, passhash)
@@ -381,6 +382,7 @@ BOOST_FUSION_DEFINE_STRUCT(
 BOOST_FUSION_DEFINE_STRUCT(
 	(grape), account_cred,
 	(boost::uuids::uuid, pharmacy_id)
+	(grape::account_type, type)
 	(std::string, username)
 	(std::string, password)
 	(std::chrono::system_clock::time_point, last_session_time)
