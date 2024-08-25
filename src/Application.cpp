@@ -21,6 +21,9 @@ bool ab::Application::OnInit()
 	try {
 		if (!wxApp::OnInit()) return false;
 
+		//splash screen
+		
+
 		wxInitAllImageHandlers();
 		wxArtProvider::Push(new ab::ArtProvider);
 
@@ -67,7 +70,8 @@ bool ab::Application::OnInit()
 		}
 
 		mMainFrame = new ab::MainFrame(nullptr, wxID_ANY, wxDefaultPosition, wxSize(822, 762));
-		mMainFrame->Show();
+		mMainFrame->Maximize();
+		mMainFrame->Show(true);
 		return true;
 	}
 	catch (const std::exception& exp) {
@@ -301,7 +305,7 @@ std::tuple<wxPanel*, wxStaticText*, wxButton*> ab::Application::CreateEmptyPanel
 	bSizer9->Add(mEmptyStr, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_CENTER_HORIZONTAL | wxALL, 5);
 
 	wxButton* btn = new wxButton(m7, wxID_ANY);
-	btn->SetBitmap(wxArtProvider::GetBitmap("add_task", wxART_OTHER));
+	btn->SetBitmap(wxArtProvider::GetBitmap("add_task", wxART_OTHER, wxSize(16,16)));
 	btn->SetLabel("button");
 	btn->SetBackgroundColour(*wxWHITE);
 	bSizer9->Add(btn, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_CENTER_HORIZONTAL | wxALL, 5);

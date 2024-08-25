@@ -33,11 +33,11 @@ bool ab::Workspace::AddSpace(wxWindow* space, const std::string& name, int img)
 	if (pageidx != wxNOT_FOUND) {
 		if (!space->IsShown()) space->Show();
 		mWorkspacebook->SetSelection(pageidx);
-		notifsignal(ab::Workspace::notif::added, pageidx);
+		notifsignal(ab::Workspace::notif::shown, space);
 		return true;
 	}
 	auto ret = mWorkspacebook->AddPage(space, name, true, img);
-	notifsignal(ab::Workspace::notif::added, mWorkspacebook->GetSelection());
+	notifsignal(ab::Workspace::notif::added, space);
 	return ret;
 }
 
@@ -46,8 +46,9 @@ void ab::Workspace::OnWorkspaceClose(wxAuiNotebookEvent& evt)
 {
 	auto pageIndex = evt.GetSelection();
 	if (pageIndex != wxNOT_FOUND) {
+		auto win = mWorkspacebook->GetPage(pageIndex);
 		mWorkspacebook->RemovePage(pageIndex);
-		notifsignal(notif::closed, pageIndex);
+		notifsignal(notif::closed, win);
 	}
 	evt.Veto();
 }

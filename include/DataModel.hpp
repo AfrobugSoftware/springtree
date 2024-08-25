@@ -7,11 +7,9 @@
 #include "serialiser.h"
 
 namespace ab {
-
 	template<grape::FusionStruct T>
 	class DataModel : public wxDataViewVirtualListModel,
-		public std::vector<boost::fusion::vector<std::bitset<boost::mpl::size<T>::value>,
-			std::array<wxDataViewItemAttr, boost::mpl::size<T>::value>, T>>
+		public std::vector<boost::fusion::vector<std::bitset<boost::mpl::size<T>::value>, std::array<wxDataViewItemAttr, boost::mpl::size<T>::value>, T>>
 	{
 	public:
 		using row_t = boost::fusion::vector<std::bitset<boost::mpl::size<T>::value>,
@@ -164,12 +162,12 @@ namespace ab {
 						std::chrono::sys_days days =
 							std::chrono::time_point_cast<std::chrono::sys_days::duration> (std::chrono::system_clock::from_time_t(date.GetTicks()));
 
-						r = std::chrono::year_month_day{ days };
+						v = std::chrono::year_month_day{ days };
 					}
 					else if constexpr (std::is_same_v<std::chrono::system_clock::time_point, arg_type>)
 					{
 						auto date = variant.GetDateTime();
-						r = std::chrono::system_clock::from_time_t(date.GetTicks());
+						v = std::chrono::system_clock::from_time_t(date.GetTicks());
 					}
 					else if constexpr (std::is_enum_v<arg_type>)
 					{

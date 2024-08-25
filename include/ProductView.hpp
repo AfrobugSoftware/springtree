@@ -10,16 +10,21 @@
 #include <wx/srchctrl.h>
 #include <wx/infobar.h>
 #include <wx/button.h>
+#include <wx/filedlg.h>
+#include <wx/progdlg.h>
 
 #include <memory>
 #include <stack>
 #include <future>
 #include <set>
+#include <chrono>
+
 
 #include "AuiTheme.hpp"
 #include "DataModel.hpp"
-#include "Grape.hpp"
 #include "serialiser.h"
+#include "Grape.hpp"
+#include "Workspace.hpp"
 
 
 BOOST_FUSION_DEFINE_STRUCT(
@@ -52,7 +57,6 @@ namespace ab {
 		enum {
 			WAIT,
 			EMPTY,
-			GRAPE_EMPTY,
 			VIEW,
 			INFO,
 		};
@@ -61,6 +65,7 @@ namespace ab {
 			ID_DATA_VIEW = wxID_HIGHEST + 1,
 			ID_BOOK,
 			ID_TOP_TOOL,
+			ID_BOTTOM_TOOL,
 			ID_SEARCH,
 			ID_IMPORT_FORULARY,
 			ID_ADD_PRODUCT,
@@ -89,9 +94,15 @@ namespace ab {
 		void CreateBottomTool();
 
 		void Load();
+		void Clear();
+		void LoadProducts(const grape::collection_type<grape::product>& products);
 		void SwitchPage(long page);
 
 		std::set<boost::uuids::uuid> mSelections;
+
+		//notification
+		void OnWorkspaceNotification(ab::Workspace::notif notif,
+			wxWindow* win);
 	private:
 		void OnBack(wxCommandEvent& evt);
 		void OnForward(wxCommandEvent& evt);
@@ -101,8 +112,16 @@ namespace ab {
 		void OnContextMenu(wxDataViewEvent& evt);
 		void OnItemActivated(wxDataViewEvent& evt);
 
+	
+		
 		//grape functions 
 		void GetProducts(size_t begin, size_t limit);
+	
+
+
+		void SetupAuiTheme();
+		void OnAuiThemeChange();
+
 
 		wxAuiManager mManager;
 		wxDataViewCtrl* mView = nullptr;
@@ -130,8 +149,9 @@ namespace ab {
 		wxActivityIndicator* mActivity = nullptr;
 		std::future<void> mWaitProducts;
 
-		std::shared_ptr<ab::DataModel<ab::pproduct>> mModel;
-		std::shared_ptr<ab::DataModel<grape::inventory>> mInventoryModel;
+		std::unique_ptr<ab::DataModel<ab::pproduct>> mModel;
+		std::unique_ptr<ab::DataModel<grape::inventory>> mInventoryModel;
+		
 		std::stack<long> mPageStack;
 		DECLARE_EVENT_TABLE()
 	};

@@ -16,7 +16,9 @@ END_EVENT_TABLE()
 ab::ProductView::ProductView(wxWindow* parent, wxWindowID id, const wxPoint& position, const wxSize& size, long style)
 	:wxPanel(parent, id, position, size, style), mManager(this, ab::AuiTheme::AUIMGRSTYLE)
 {
+	SetupAuiTheme();
 	CreateBook();
+	CreatePanels();
 	CreateToolBar();
 	CreateBottomTool();
 
@@ -27,6 +29,8 @@ ab::ProductView::ProductView(wxWindow* parent, wxWindowID id, const wxPoint& pos
 
 ab::ProductView::~ProductView()
 {
+	mManager.UnInit();
+	mModel.release();
 }
 
 void ab::ProductView::CreateBook()
@@ -44,6 +48,7 @@ void ab::ProductView::CreateView()
 	mInfoBar->SetAutoLayout(true);
 
 	mView = new wxDataViewCtrl(panel, ID_DATA_VIEW, wxDefaultPosition, wxDefaultSize, wxNO_BORDER | wxDV_ROW_LINES | wxDV_HORIZ_RULES);
+	mModel = std::make_unique<ab::DataModel<ab::pproduct>>();
 	mView->AssociateModel(mModel.get());
 
 	mView->AppendTextColumn(wxT("Name"), col_name, wxDATAVIEW_CELL_INERT, FromDIP(450), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_REORDERABLE);
@@ -91,7 +96,7 @@ void ab::ProductView::CreatePanels()
 		}
 	});
 
-	mBook->AddPage(mWaitPanel,"Wiat", true);
+	mBook->AddPage(mWaitPanel,"Wait", true);
 	mBook->AddPage(mEmptyPanel, "Empty", false);
 }
 
@@ -100,9 +105,9 @@ void ab::ProductView::CreateToolBar()
 	mTopTool = new wxAuiToolBar(this, ID_TOP_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mTopTool->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
 
-	mBack = mTopTool->AddTool(wxID_BACKWARD,wxEmptyString, wxArtProvider::GetBitmap("back"), "Back");
+	mBack = mTopTool->AddTool(wxID_BACKWARD,wxEmptyString, wxArtProvider::GetBitmap("back", wxART_OTHER, wxSize(16,16)), "Back");
 	mTopTool->AddSpacer(FromDIP(5));
-	mForward = mTopTool->AddTool(wxID_FORWARD,wxEmptyString, wxArtProvider::GetBitmap("forward"), "Back");
+	mForward = mTopTool->AddTool(wxID_FORWARD,wxEmptyString, wxArtProvider::GetBitmap("forward", wxART_OTHER, wxSize(16,16)), "forward");
 
 	mSearchBar = new wxSearchCtrl(mTopTool, ID_SEARCH, wxEmptyString, wxDefaultPosition, wxSize(FromDIP(450), FromDIP(-1)), wxWANTS_CHARS);
 #ifndef __WXMAC__
@@ -115,18 +120,18 @@ void ab::ProductView::CreateToolBar()
 	mTopTool->AddStretchSpacer();
 	mTopTool->AddTool(ID_ADD_PRODUCT, "Add Product", wxArtProvider::GetBitmap("add", wxART_OTHER,FromDIP(wxSize(16,16))));
 	mTopTool->Realize();
-	mManager.AddPane(mTopTool, wxAuiPaneInfo().Name("TopToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(2).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
+	mManager.AddPane(mTopTool, wxAuiPaneInfo().Name("TopToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(1).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
 }
 
 void ab::ProductView::CreateBottomTool()
 {
-	mBottomTool = new wxAuiToolBar(this, ID_TOP_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
+	mBottomTool = new wxAuiToolBar(this, ID_BOTTOM_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mBottomTool->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
 
-	mBottomTool->AddTool(ID_IMPORT_FORULARY, "Import formulary", wxArtProvider::GetBitmap("edit_note"));
+	mBottomTool->AddTool(ID_IMPORT_FORULARY, "Import formulary", wxArtProvider::GetBitmap("edit_not", wxART_OTHER, wxSize(16,16)));
 
 	mBottomTool->Realize();
-	mManager.AddPane(mBottomTool, wxAuiPaneInfo().Name("TopToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(2).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
+	mManager.AddPane(mBottomTool, wxAuiPaneInfo().Name("BottomToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(2).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
 }
 
 void ab::ProductView::Load()
@@ -134,6 +139,15 @@ void ab::ProductView::Load()
 	mBook->SetSelection(WAIT);
 	mActivity->Start();
 	mWaitProducts = std::async(std::launch::async,std::bind_front(&ab::ProductView::GetProducts, this), 0, 1000);
+}
+
+void ab::ProductView::Clear()
+{
+	mModel->Clear();
+}
+
+void ab::ProductView::LoadProducts(const grape::collection_type<grape::product>& products)
+{
 }
 
 void ab::ProductView::OnBack(wxCommandEvent& evt)
@@ -147,6 +161,100 @@ void ab::ProductView::OnForward(wxCommandEvent& evt)
 
 void ab::ProductView::OnImportFormulary(wxCommandEvent& evt)
 {
+	auto& app = wxGetApp();
+	auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+	grape::session::response_type resp{};
+	std::string target = std::format("/product/formulary/checkname/{}", app.mPharmacyManager.pharmacy.name);
+	auto fut = sess->req(http::verb::get, target, {});
+	grape::credentials cred;
+	cred.pharm_id = app.mPharmacyManager.pharmacy.id;
+	cred.branch_id = app.mPharmacyManager.branch.id;
+	cred.account_id = app.mPharmacyManager.account.account_id;
+	cred.session_id = app.mPharmacyManager.account.session_id.value();
+	constexpr const size_t size = grape::serial::get_size(cred);
+
+	{
+		wxBusyInfo wait("Checking for formulary\nPlease wait...");
+		resp = fut.get();
+	}
+	if (resp.result() != http::status::not_found) {
+		bool load = wxMessageBox("This pharmacy already has a formulary\nDo you want load it?","Formulary", wxICON_INFORMATION | wxYES_NO) == wxYES;
+		if (!load) return;
+
+		//Load in formulary
+		grape::body_type body(size, 0x00);
+		grape::serial::write(boost::asio::buffer(body), cred);
+		fut = sess->req(http::verb::get, "/product/formulary/getproducts", std::move(body));
+
+		{
+			wxBusyInfo wait("Loading products from formulary\nPlease wait...");
+			resp = fut.get();
+		}
+		
+		return;
+	}
+
+
+	wxFileDialog fileDialog(this, "Formulary Import", wxEmptyString, wxEmptyString, "form files (*.form)|*.form",wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+	if (fileDialog.ShowModal() == wxID_CANCEL)
+		return;
+	auto filename = fs::path(fileDialog.GetPath().ToStdString());
+	if (filename.extension().string() != ".form") {
+		wxMessageBox(fmt::format("{} is not a formulary file", filename.string()), "Formulary", wxICON_WARNING | wxOK);
+		return;
+	}
+
+	std::ifstream file(filename);
+	if (!file.is_open()) {
+		wxMessageBox(fmt::format("Cannot open {} permission denied", filename.string()), "Formulary", wxICON_ERROR | wxOK);
+		return;
+	}
+	std::stringstream data;
+	data << file.rdbuf();
+	try {
+		const js::json form = js::json::parse(data.str());
+		const js::json header = form["header"];
+		const js::json products = form["products"];
+		bool has_inven = static_cast<bool>(form["has_inventory"]);
+
+		const size_t count = static_cast<std::uint64_t>(header["product_count"]);
+		std::chrono::system_clock::time_point p(std::chrono::system_clock::duration(static_cast<std::uint64_t>(header["timestamp"])));
+
+		wxMessageBox(fmt::format("Importing formulary\nName: {}\n\nAddress: {}\n\nDate created: {:%d:%m:%Y}\n\nProducts count: {:d}",
+			static_cast<std::string>(header["pharmacy"]),
+			static_cast<std::string>(header["address"]),
+			p,
+			count), "Formulary import", wxICON_INFORMATION | wxOK);
+		wxProgressDialog dlg("Loading formulary", "please wait...", 100, this, wxPD_CAN_ABORT | wxPD_SMOOTH | wxPD_APP_MODAL | wxPD_AUTO_HIDE);
+
+		//create the formulary ?
+
+
+
+		std::vector<grape::product> prods;
+		prods.reserve(products.size());
+		for (const auto& prod : products) {
+			auto& p         = prods.emplace_back(grape::product{});
+			p.id            = boost::uuids::nil_uuid();
+			p.serial_num    = 0;
+			p.name          = static_cast<std::string>(prod["name"]);
+			p.generic_name  = static_cast<std::string>(prod["generic_name"]);
+			p.class_        = static_cast<std::string>(prod["class"]);
+			p.formulation   = static_cast<std::string>(prod["formulation"]);
+			p.strength      = static_cast<std::string>(prod["strength"]);
+			p.strength_type = static_cast<std::string>(prod["strength_type"]);
+			p.usage_info    = static_cast<std::string>(prod["usage_info"]);
+			p.description   = static_cast<std::string>(prod["description"]);
+			p.indications   = static_cast<std::string>(prod["health_conditions"]);
+			p.sideeffects   = static_cast<std::string>(prod["side_effects"]);
+		}
+
+	}
+	catch (const std::exception& exp) {
+		wxMessageBox(std::format("Formulary error:\n{}", exp.what()), "Formulary", wxICON_ERROR | wxOK);
+		spdlog::error(exp.what());
+		return;
+	}
 }
 
 void ab::ProductView::OnUpdateArrows(wxUpdateUIEvent& evt)
@@ -158,10 +266,10 @@ void ab::ProductView::OnUpdateArrows(wxUpdateUIEvent& evt)
 	{
 		//
 		if (mPageStack.size() < 2) {
-			mBack->GetWindow()->Disable();
+			mBack->SetActive(false);
 		}
 		else {
-			mBack->GetWindow()->Enable();
+			mBack->SetActive(true);
 		}
 	}
 	break;
@@ -189,6 +297,28 @@ void ab::ProductView::OnItemActivated(wxDataViewEvent& evt)
 {
 }
 
+void ab::ProductView::OnWorkspaceNotification(ab::Workspace::notif notif, wxWindow* win)
+{
+	if (this != win) return;
+
+	switch (notif)
+	{
+	case ab::Workspace::notif::closed:
+	case ab::Workspace::notif::deleted:
+		Clear();
+		break;
+	case ab::Workspace::notif::opened:
+	case ab::Workspace::notif::added:
+	case ab::Workspace::notif::shown:
+		Load();
+		break;
+	case ab::Workspace::notif::hidden:
+		break;
+	default:
+		break;
+	}
+}
+
 void ab::ProductView::GetProducts(size_t begin, size_t limit)
 {
 	auto& app = wxGetApp();
@@ -210,7 +340,7 @@ void ab::ProductView::GetProducts(size_t begin, size_t limit)
 		auto buf = grape::serial::write(boost::asio::buffer(body), cred);
 		grape::serial::write(buf, page);
 
-		auto fut = sess->req(http::verb::get, "/products/get"s, std::move(body));
+		auto fut = sess->req(http::verb::get, "/product/get"s, std::move(body));
 		auto resp = fut.get();
 		if (resp.result() == http::status::not_found) {
 			mBook->SetSelection(EMPTY);
@@ -230,6 +360,22 @@ void ab::ProductView::GetProducts(size_t begin, size_t limit)
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());
-		mBook->SetSelection(GRAPE_EMPTY);
+		wxMessageBox(exp.what(), "Products", wxICON_ERROR | wxOK);
+		mBook->SetSelection(EMPTY);
 	}
+}
+
+void ab::ProductView::SetupAuiTheme()
+{
+	auto artProvider = mManager.GetArtProvider();
+	//pass the art provider to a place where it gets its settings from?
+	ab::AuiTheme::Update(artProvider);
+	ab::AuiTheme::Register(std::bind_front(&ab::ProductView::OnAuiThemeChange, this));
+}
+
+void ab::ProductView::OnAuiThemeChange()
+{
+	auto auiArt = mManager.GetArtProvider();
+	ab::AuiTheme::Update(auiArt);
+	mManager.Update();
 }

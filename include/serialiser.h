@@ -19,8 +19,19 @@
 #include <bit>
 #include <bitset>
 
+namespace boost {
+	namespace fusion {
+		namespace traits {
+			template <>
+			struct is_view<std::chrono::system_clock::time_point> : mpl::false_ {};
+		}
+	}
+}
+
 namespace grape
 {
+
+
 	template<typename T>
 	concept Integers = std::is_integral_v<T>  || std::is_floating_point_v<T>;
 

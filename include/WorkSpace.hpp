@@ -22,7 +22,7 @@ namespace ab {
 			shown,
 			hidden
 		};
-		boost::signals2::signal<void(notif, size_t)> notifsignal;
+		boost::signals2::signal<void(notif, wxWindow*)> notifsignal;
 		boost::signals2::signal<void(const wxTreeItemId&, const std::string& label)> mDropTreeSignal;
 
 		Workspace(wxWindow* parent, wxWindowID id = wxID_ANY, const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize(829, 644), long style = wxTAB_TRAVERSAL);

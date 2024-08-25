@@ -410,4 +410,5 @@ namespace grape {
 		http::vector_body<std::uint8_t>,
 		http::vector_body<std::uint8_t>
 	>;
+	using body_type = session::request_type::body_type::value_type;
 };

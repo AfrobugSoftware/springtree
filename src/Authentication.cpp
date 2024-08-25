@@ -109,6 +109,13 @@ ab::Register::Register(wxWindow* parent, wxWindowID id, const wxString& title, c
 	fgSizer1->Add(mPhoneNoValue, 0, wxALL | wxEXPAND, 5);
 
 
+	mDobText = new wxStaticText(m_scrolledWindow1, wxID_ANY, wxT("Date of birth"), wxDefaultPosition, wxDefaultSize, 0);
+	mDobText->Wrap(-1);
+	fgSizer1->Add(mDobText, 0, wxALL, 5);
+
+	mDobValue = new wxDatePickerCtrl(m_scrolledWindow1, wxID_ANY, wxDateTime::Now(), wxDefaultPosition, wxDefaultSize, wxDP_DROPDOWN);
+	mDobValue->SetRange(wxDateTime{}, wxDateTime::Now());
+	fgSizer1->Add(mDobValue, 0, wxALL, 5);
 
 	mPasswordLabel = new wxStaticText(m_scrolledWindow1, wxID_ANY, wxT("Password"), wxDefaultPosition, wxDefaultSize, 0);
 	mPasswordLabel->Wrap(-1);
@@ -289,12 +296,18 @@ bool ab::Register::TransferDataFromWindow()
 		const auto hash = bcrypt::generateHash(pass);
 
 		grape::account account;
+		account.pharmacy_id = app.mPharmacyManager.pharmacy.id;
 		account.account_id = boost::uuids::nil_uuid();
 		account.first_name = mFirstNameValue->GetValue().ToStdString();
 		account.last_name = mLastNameValue->GetValue().ToStdString();
+		account.type = static_cast<grape::account_type>(mAccountType->GetSelection());
 		account.passhash  = hash;
 		account.username = name;
 		account.email = mEmailValue->GetValue().ToStdString();
+		auto gdob = mDobValue->GetValue();
+		account.dob = std::chrono::year_month_day(std::chrono::year(gdob.GetYear())
+			,std::chrono::month(gdob.GetMonth() + 1), std::chrono::day(gdob.GetDay()));
+
 		account.phonenumber = mPhoneNoValue->GetValue().ToStdString();
 		account.regnumber = mRegNumValue->GetValue().ToStdString();
 		account.sec_que = mSecurityQuestions->GetStringSelection();
@@ -320,6 +333,7 @@ bool ab::Register::TransferDataFromWindow()
 
 BEGIN_EVENT_TABLE(ab::SignIn, wxDialog)
 	EVT_BUTTON(ab::SignIn::ID_SIGNUP, ab::SignIn::OnSignUp)
+	EVT_HYPERLINK(ab::SignIn::ID_FORGOT_PASS, ab::SignIn::OnForgotPassword)
 	EVT_CLOSE(ab::SignIn::OnClose)
 END_EVENT_TABLE()
 
@@ -485,6 +499,140 @@ void ab::SignIn::OnSignUp(wxCommandEvent& evt)
 
 void ab::SignIn::OnForgotPassword(wxHyperlinkEvent& evt)
 {
+	auto& app = wxGetApp();
+	try {
+
+		auto username = wxGetTextFromUser("Please enter your username", "Forgot password").ToStdString();
+		if (username.empty()) return;
+
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+		grape::account_cred cred;
+		cred.username = username;
+		cred.pharmacy_id = app.mPharmacyManager.pharmacy.id;
+		grape::session::request_type::body_type::value_type body(grape::serial::get_size(cred), 0x00);
+		grape::serial::write(boost::asio::buffer(body), cred);
+		auto fut = sess->req(http::verb::get, "/account/getsecque", std::move(body));
+		grape::session::response_type resp{};
+		{
+			wxBusyInfo wait("Getting security question\nPlease wait..");
+			resp = fut.get();
+		}
+
+		if (resp.result() != http::status::ok) {
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+		if (resp.body().empty()) throw std::logic_error("expected a body");
+		auto&& [que, buf] = grape::serial::read<grape::string_t>(boost::asio::buffer(resp.body()));
+
+		auto ans = wxGetTextFromUser(fmt::format("Please answer the following question\n\n{}",
+			boost::fusion::at_c<0>(que)), "Security question");
+		if (ans.empty()) return;
+
+		cred.password = ans;
+		grape::session::request_type::body_type::value_type body2(grape::serial::get_size(cred), 0x00);
+		grape::serial::write(boost::asio::buffer(body2), cred);
+		fut = sess->req(http::verb::post, "/account/verifysecque", std::move(body2));
+		{
+			wxBusyInfo wait("Verifying security question\nPlease wait..");
+			resp = fut.get();
+		}
+
+		if (resp.result() != http::status::ok) {
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+
+		//reset password
+		wxDialog dialog(this, wxID_ANY, "Reset passord", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE | wxTAB_TRAVERSAL);
+
+		//dialog.SetSizeHints(wxDefaultSize, wxDefaultSize);
+		dialog.SetBackgroundColour(*wxWHITE);
+		wxDialog* d = std::addressof(dialog);
+
+		wxBoxSizer* bSizer1;
+		bSizer1 = new wxBoxSizer(wxVERTICAL);
+
+		auto contTitle = new wxStaticText(d, wxID_ANY, wxT("Please enter new password.\n"), wxDefaultPosition, wxDefaultSize, 0);
+		contTitle->Wrap(-1);
+		contTitle->SetFont(wxFont(wxFontInfo(10).Bold().AntiAliased().Family(wxFONTFAMILY_SWISS)));
+
+		bSizer1->Add(contTitle, wxSizerFlags().CenterHorizontal().Border(wxALL, FromDIP(5)));
+
+		auto q = new wxStaticText(d, wxID_ANY, wxT("Password"), wxDefaultPosition, wxDefaultSize, 0);
+		q->Wrap(-1);
+		bSizer1->Add(q, wxSizerFlags().CenterHorizontal().Border(wxALL, FromDIP(5)));
+
+		auto qv = new wxTextCtrl(d, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0);
+		qv->SetMaxLength(250);
+		bSizer1->Add(qv, wxSizerFlags().Expand().CenterHorizontal().Border(wxALL, FromDIP(5)));
+
+		auto q2 = new wxStaticText(d, wxID_ANY, wxT("Confirm Password"), wxDefaultPosition, wxDefaultSize, 0);
+		q2->Wrap(-1);
+		bSizer1->Add(q2, wxSizerFlags().CenterHorizontal().Border(wxALL, FromDIP(5)));
+
+		auto qv2 = new wxTextCtrl(d, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0);
+		qv2->SetMaxLength(250);
+		bSizer1->Add(qv2, wxSizerFlags().CenterHorizontal().Border(wxALL, FromDIP(5)));
+
+		auto m_panel7 = new wxPanel(d, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
+		wxBoxSizer* bSizer4;
+		bSizer4 = new wxBoxSizer(wxVERTICAL);
+
+		auto m_sdbSizer2 = new wxStdDialogButtonSizer();
+		auto m_sdbSizer2OK = new wxButton(m_panel7, wxID_OK);
+		m_sdbSizer2->AddButton(m_sdbSizer2OK);
+		auto m_sdbSizer2Cancel = new wxButton(m_panel7, wxID_CANCEL);
+		m_sdbSizer2->AddButton(m_sdbSizer2Cancel);
+		m_sdbSizer2->Realize();
+		bSizer4->Add(m_sdbSizer2, 0, wxEXPAND, 5);
+
+
+
+		m_panel7->SetSizer(bSizer4);
+		m_panel7->Layout();
+		bSizer4->Fit(m_panel7);
+
+		bSizer1->Add(m_panel7, 0, wxEXPAND | wxALL, 5);
+
+
+		d->SetSizer(bSizer1);
+		d->Layout();
+		d->Center(wxBOTH);
+
+		d->SetIcon(app.mAppIcon);
+		std::string pass;
+		while (1) {
+			if (d->ShowModal() == wxID_CANCEL) return;
+
+			pass = qv->GetValue().ToStdString();
+			auto cpass = qv2->GetValue().ToStdString();
+
+			if (pass != cpass) {
+				wxMessageBox("Password mismatch", "Forgot password", wxICON_WARNING | wxOK);
+				continue;
+			}
+			break;
+		}
+
+		cred.password = pass + "-" + ans;
+		grape::session::request_type::body_type::value_type body3(grape::serial::get_size(cred), 0x00);
+		grape::serial::write(boost::asio::buffer(body3), cred);
+		fut = sess->req(http::verb::post, "/account/passreset", std::move(body3));
+		{
+			wxBusyInfo wait("Updating password\nPlease wait..");
+			resp = fut.get();
+		}
+		
+		if (resp.result() != http::status::ok) {
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+
+		wxMessageBox("Password updated sucessfully\nPlease sign in", "Sign in", wxICON_INFORMATION | wxOK);
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(exp.what());
+		wxMessageBox(exp.what(), "Forgot password", wxICON_ERROR | wxOK);
+	}	
+		
 }
 
 bool ab::SignIn::TransferDataFromWindow()
@@ -529,7 +677,7 @@ bool ab::SignIn::TransferDataFromWindow()
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());
-		wxMessageBox(exp.what(), "Sign up", wxICON_ERROR | wxOK);
+		wxMessageBox(exp.what(), "Sign in", wxICON_ERROR | wxOK);
 	}
 	return false;
 }

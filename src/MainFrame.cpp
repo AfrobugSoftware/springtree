@@ -16,10 +16,10 @@ ab::MainFrame::MainFrame(wxWindow* parent, wxWindowID id, const wxPoint& positio
 	CreateMenubar();
 
 	mPager = new wxSimplebook(this, ID_PAGER);
-	CreateModules();
 	
 	CreateWelcomePage();
 	CreateWorkspace();
+	CreateModules();
 	CreateImageList();
 
 	mPager->AddPage(mWelcomePage, "Welcome", true);
@@ -89,7 +89,7 @@ void ab::MainFrame::CreateModules()
 
 	ab::mod mod;
 	mod.callback = std::bind_front(&ab::MainFrame::OnModuleActivated, this);
-	mod.win = nullptr;
+	mod.win = mProductView;
 	mod.name = "Products";
 	mod.img = 0;
 	mod.id = mModules->mProducts;
@@ -108,6 +108,9 @@ void ab::MainFrame::CreateWorkspace()
 {
 	mWorkspace = new ab::Workspace(mPager, ID_WORKSPACE, wxDefaultPosition, wxDefaultSize, wxNO_BORDER | wxTAB_TRAVERSAL);
 	mWorkspace->notifsignal.connect(std::bind_front(&ab::MainFrame::OnWorkspaceNotif, this));
+
+	mProductView = new ab::ProductView(mWorkspace, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+	mWorkspace->notifsignal.connect(std::bind_front(&ab::ProductView::OnWorkspaceNotification, mProductView));
 }
 
 void ab::MainFrame::CreateWelcomePage()
@@ -358,7 +361,7 @@ void ab::MainFrame::OnModuleActivated(const ab::mod& mod, ab::module_evt evt)
 		mPager->SetSelection(WORKSPACE);
 }
 
-void ab::MainFrame::OnWorkspaceNotif(ab::Workspace::notif notif, size_t page)
+void ab::MainFrame::OnWorkspaceNotif(ab::Workspace::notif notif, wxWindow* win)
 {
 	switch (notif) {
 	case ab::Workspace::notif::closed:

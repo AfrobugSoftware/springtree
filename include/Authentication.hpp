@@ -15,6 +15,8 @@
 #include <wx/hyperlink.h>
 #include <wx/statbmp.h>
 #include <wx/busyinfo.h>
+#include <wx/datectrl.h>
+#include <wx/textdlg.h>
 
 #include <boost/algorithm/string.hpp>
 #include <../base/bcrypt/include/bcrypt.h>
@@ -54,6 +56,8 @@ namespace ab {
 		wxButton* m_sdbSizer3Save = nullptr;
 		wxButton* m_sdbSizer3Cancel = nullptr;
 		wxFlexGridSizer* fgSizer1 = nullptr;
+		wxStaticText* mDobText = nullptr;
+		wxDatePickerCtrl* mDobValue = nullptr;
 
 		enum {
 			ID_SHOW_PASSWORD = wxID_HIGHEST + 4500,

@@ -16,6 +16,8 @@
 #include "Module.hpp"
 #include "AuiTheme.hpp"
 
+#include "ProductView.hpp"
+
 namespace ab {
 	class MainFrame : public wxFrame
 	{
@@ -58,7 +60,7 @@ namespace ab {
 
 		//signals
 		void OnModuleActivated(const ab::mod& mod, ab::module_evt evt);
-		void OnWorkspaceNotif(ab::Workspace::notif notif, size_t page);
+		void OnWorkspaceNotif(ab::Workspace::notif notif, wxWindow* win);
 		void OnAuiThemeChange();
 
 		wxStaticText* time1 = nullptr;
@@ -74,6 +76,7 @@ namespace ab {
 		ab::Workspace* mWorkspace = nullptr;
 		ab::Modules* mModules = nullptr;
 
+		ab::ProductView* mProductView = nullptr;
 
 		DECLARE_EVENT_TABLE()
 	};
