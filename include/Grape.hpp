@@ -290,6 +290,7 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(std::string, created_by)
 	(std::chrono::system_clock::time_point, created_date)
 	(std::string, version)
+	(std::uint64_t, usage_count)
 	(grape::formulary_access_level, access_level)
 )
 

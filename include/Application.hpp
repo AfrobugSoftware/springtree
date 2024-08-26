@@ -80,6 +80,8 @@ namespace ab {
 		grape::address mAppAddress;
 
 		wxArrayString mSecurityQuestions;
+		wxArrayString mFormulationChoices;
+
 		ab::PharmacyManager mPharmacyManager;
 		pof::base::net_manager mNetManager;
 		std::string gVersion;

@@ -83,21 +83,12 @@ void ab::ProductView::CreatePanels()
 
 	mNoConnectionButton->SetLabel("Retry");
 	mNoConnectionButton->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
-		//try to load again
-		auto& top = mPageStack.top();
-		switch (top)
-		{
-		case VIEW:
-			break;
-		case INFO:
-			break;
-		default:
-			break;
-		}
+		
 	});
 
 	mBook->AddPage(mWaitPanel,"Wait", true);
 	mBook->AddPage(mEmptyPanel, "Empty", false);
+	mBook->AddPage(mNoConnectionPanel, "Server error", false);
 }
 
 void ab::ProductView::CreateToolBar()
@@ -281,6 +272,12 @@ void ab::ProductView::OnUpdateArrows(wxUpdateUIEvent& evt)
 
 void ab::ProductView::OnAddProduct(wxCommandEvent& evt)
 {
+	ab::AddProductDialog ap(nullptr);
+	wxWindowID ret = ap.ShowModal();
+	if (ret == wxID_OK) {
+		Load();
+	}
+	//handle abourt
 }
 
 void ab::ProductView::OnContextMenu(wxDataViewEvent& evt)
@@ -361,7 +358,7 @@ void ab::ProductView::GetProducts(size_t begin, size_t limit)
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());
 		wxMessageBox(exp.what(), "Products", wxICON_ERROR | wxOK);
-		mBook->SetSelection(EMPTY);
+		mBook->SetSelection(SERVER_ERROR);
 	}
 }
 

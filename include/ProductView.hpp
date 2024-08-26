@@ -25,6 +25,7 @@
 #include "serialiser.h"
 #include "Grape.hpp"
 #include "Workspace.hpp"
+#include "AddProduct.hpp"
 
 
 BOOST_FUSION_DEFINE_STRUCT(
@@ -57,6 +58,7 @@ namespace ab {
 		enum {
 			WAIT,
 			EMPTY,
+			SERVER_ERROR,
 			VIEW,
 			INFO,
 		};
@@ -116,7 +118,7 @@ namespace ab {
 		
 		//grape functions 
 		void GetProducts(size_t begin, size_t limit);
-	
+		
 
 
 		void SetupAuiTheme();
