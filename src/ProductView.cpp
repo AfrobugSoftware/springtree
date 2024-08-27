@@ -41,7 +41,7 @@ void ab::ProductView::CreateBook()
 
 void ab::ProductView::CreateView()
 {
-	wxPanel* panel = new wxPanel(this, wxID_ANY);
+	wxPanel* panel = new wxPanel(mBook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNO_BORDER | wxTAB_TRAVERSAL);
 	wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
 
 	mInfoBar = new wxInfoBar(panel, wxID_ANY);

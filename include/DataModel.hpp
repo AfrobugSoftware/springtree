@@ -67,9 +67,15 @@ namespace ab {
 
 		void Reload( const std::vector<T>& items) {
 			Clear();
+			wxDataViewItemArray itemArray;
+			size_t idx = 0;
+			vec_base::reserve(items.size());
 			for (auto&& i : items) {
 				typename vec_base::value_type v{};
 				boost::fusion::at_c<2>(v) = std::move(i);
+				vec_base::emplace_back(std::move(v));
+				ItemAdded(ToDataViewItem(idx), ToDataViewItem(0));
+				idx++;
 			}
 			Reset(items.size());
 		}
