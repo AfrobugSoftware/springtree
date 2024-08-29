@@ -7,13 +7,119 @@
 #include "serialiser.h"
 
 namespace ab {
+
+	template<grape::FusionStruct T>
+	auto make_variant(T&& value) -> std::array<wxVariant, boost::mpl::size<T>::value>
+	{
+		std::array<wxVariant, boost::mpl::size<T>::value> ret;
+		typedef boost::mpl::range_c<unsigned, 0, boost::mpl::size<T>::value> range;
+		boost::fusion::for_each(range(), [&](auto i) {
+			using constant = std::decay_t<decltype(i)>;
+			using arg_type = std::decay_t<decltype(boost::fusion::at<constant>(value))>;
+
+			auto& v = boost::fusion::at_c<constant::value>(std::forward<T>(value));
+			if constexpr (std::is_same_v<std::chrono::year_month_day, arg_type>)
+			{
+				std::chrono::sys_days days{ v };
+				ret[i] = wxVariant(wxDateTime(days.time_since_epoch().count()));
+			}
+			else if constexpr (std::is_same_v<std::chrono::system_clock::time_point, arg_type>)
+			{
+				ret[i] = wxVariant(wxDateTime(v.time_since_epoch().count()));
+			}
+			else if constexpr (std::is_enum_v<arg_type>)
+			{
+				ret[i] = wxVariant("");
+			}
+			else if constexpr (std::is_same_v<arg_type, pof::base::currency>) {
+				double amount = static_cast<double>(v);
+				ret[i] = wxVariant(std::format("N {:.2f}", amount));
+			}
+			else if constexpr (std::is_integral_v<arg_type>) {
+				if constexpr (sizeof(arg_type) == 4) {
+					ret[i] = wxVariant(v);
+				}
+				else {
+					ret[i] = wxVariant(wxLongLong(v));
+				}
+			}
+			else if constexpr (std::is_same_v<std::string, arg_type>) {
+				ret[i] =  wxVariant(std::move(v));
+			}
+		});
+		return ret;
+	}
+
+	template<grape::FusionStruct T>
+	auto make_struct(const std::array<wxVariant, boost::mpl::size<T>::value>& value) -> T
+	{
+		T ret{};
+		typedef boost::mpl::range_c<unsigned, 0, boost::mpl::size<T>::value> range;
+
+		boost::fusion::for_each(range(), [&](auto i) {
+			using constant = std::decay_t<decltype(i)>;
+			using arg_type = std::decay_t<decltype(boost::fusion::at<constant>(ret))>;
+			auto& v = boost::fusion::at_c<constant::value>(ret);
+			auto& variant = value[i];
+			if constexpr (std::is_same_v<std::chrono::year_month_day, arg_type>)
+			{
+				auto date = variant.GetDateTime();
+				std::chrono::sys_days days =
+					std::chrono::time_point_cast<std::chrono::sys_days::duration> (std::chrono::system_clock::from_time_t(date.GetTicks()));
+
+				v = std::chrono::year_month_day{ days };
+			}
+			else if constexpr (std::is_same_v<std::chrono::system_clock::time_point, arg_type>)
+			{
+				auto date = variant.GetDateTime();
+				v = std::chrono::system_clock::from_time_t(date.GetTicks());
+			}
+			else if constexpr (std::is_enum_v<arg_type>)
+			{
+			}
+			else if constexpr (std::is_integral_v<arg_type>) {
+				if constexpr (sizeof(arg_type) == 4) {
+					if constexpr (std::is_signed_v<arg_type>) {
+						v = variant.GetLong();
+					}
+					else {
+						v = static_cast<arg_type>(variant.GetLong());
+					}
+				}
+				else {
+					if constexpr (std::is_signed_v<arg_type>) {
+						v = variant.GetLongLong().GetValue();
+					}
+					else {
+						v = variant.GetULongLong().GetValue();
+					}
+				}
+			}
+			else if constexpr (std::is_same_v<arg_type, pof::base::currency>) {
+				auto string = variant.GetString().ToStdString();
+				v = pof::base::currency(string);
+			}
+			else if constexpr (std::is_same_v<std::string, arg_type>) {
+				v = variant.GetString().ToStdString();
+			}
+		});
+		return ret;
+	}
+
+
 	template<grape::FusionStruct T>
 	class DataModel : public wxDataViewVirtualListModel,
-		public std::vector<boost::fusion::vector<std::bitset<boost::mpl::size<T>::value>, std::array<wxDataViewItemAttr, boost::mpl::size<T>::value>, T>>
+		public std::vector<boost::fusion::vector<
+		 std::bitset<boost::mpl::size<T>::value>,
+		 std::array<wxDataViewItemAttr, boost::mpl::size<T>::value>, 
+		 std::array<wxVariant, boost::mpl::size<T>::value>
+		>>
 	{
 	public:
-		using row_t = boost::fusion::vector<std::bitset<boost::mpl::size<T>::value>,
-			std::array<wxDataViewItemAttr, boost::mpl::size<T>::value>, T>;
+		using row_t = boost::fusion::vector<
+			std::bitset<boost::mpl::size<T>::value>,
+			std::array<wxDataViewItemAttr, boost::mpl::size<T>::value>,
+			std::array<wxVariant, boost::mpl::size<T>::value>>;
 		using vec_base = std::vector<row_t>;
 		using vec_base::operator[];
 		using specialcol_t = std::pair<std::function<void(wxVariant&, unsigned int row, unsigned int col)>,
@@ -55,16 +161,6 @@ namespace ab {
 			return FromDataViewItem(item);
 		}
 
-		std::optional<const T&> GetValue(size_t row) const {
-			if (vec_base::empty()) return std::nullopt;
-			return boost::fusion::at_c<2>((*this)[row]);
-		}
-
-		std::optional<T&> GetValue(size_t row) {
-			if (vec_base::empty()) return std::nullopt;
-			return boost::fusion::at_c<2>((*this)[row]);
-		}
-
 		void Reload( const std::vector<T>& items) {
 			Clear();
 			wxDataViewItemArray itemArray;
@@ -72,7 +168,7 @@ namespace ab {
 			vec_base::reserve(items.size());
 			for (auto&& i : items) {
 				typename vec_base::value_type v{};
-				boost::fusion::at_c<2>(v) = std::move(i);
+				boost::fusion::at_c<2>(v) = make_variant(std::move(i));
 				vec_base::emplace_back(std::move(v));
 				ItemAdded(ToDataViewItem(idx), ToDataViewItem(0));
 				idx++;
@@ -99,46 +195,9 @@ namespace ab {
 				return;
 			}
 			
-
 			if (col > col_count || vec_base::empty()) return;
 			auto& r = boost::fusion::at_c<2>((*this)[row]);
-			boost::fusion::for_each(range(), [&](auto i) {
-				using constant = std::decay_t<decltype(i)>;
-				using arg_type = std::decay_t<decltype(boost::fusion::at<constant>(r))>;
-				if (constant::value != col) return;
-
-				auto& v = boost::fusion::at_c<constant::value>(r);
-				if constexpr (std::is_same_v<std::chrono::year_month_day, arg_type>)
-				{
-					std::chrono::sys_days days{v};
-					variant =  wxVariant(wxDateTime(days.time_since_epoch().count()));
-				}
-				else if constexpr (std::is_same_v<std::chrono::system_clock::time_point, arg_type>)
-				{
-					variant = wxVariant(wxDateTime(v.time_since_epoch().count()));
-				}
-				else if constexpr (std::is_enum_v<arg_type>)
-				{
-					variant = wxVariant("");
-				}
-				else if constexpr (std::is_same_v<arg_type, pof::base::currency>) {
-					double amount = static_cast<double>(v);
-					variant = wxVariant(std::format("N {:.2f}", amount));
-				}
-				else if constexpr (std::is_integral_v<arg_type>){
-					if constexpr (sizeof(arg_type) == 4) {
-						variant = wxVariant(v);
-					}
-					else {
-						variant = wxVariant(wxLongLong(v));
-					}
-				}
-				else if constexpr (std::is_same_v<std::string, arg_type>) {
-					variant = wxVariant(v);
-				}
-
-			});
-
+			variant = r[col];
 		}
 
 		virtual bool SetValueByRow(const wxVariant& variant, unsigned int row, unsigned int col) {
@@ -155,56 +214,8 @@ namespace ab {
 
 				if (col > col_count || vec_base::empty()) return false;
 				auto& r = boost::fusion::at_c<2>((*this)[row]); 
-					boost::fusion::for_each(range(), [&](auto i) {
-					using constant = std::decay_t<decltype(i)>;
-					using arg_type = std::decay_t<decltype(boost::fusion::at<constant>(r))>;
-					if (constant::value != col) return;
-
-
-					auto& v = boost::fusion::at_c<constant::value>(r);
-					if constexpr (std::is_same_v<std::chrono::year_month_day, arg_type>)
-					{
-						auto date = variant.GetDateTime();
-						std::chrono::sys_days days =
-							std::chrono::time_point_cast<std::chrono::sys_days::duration> (std::chrono::system_clock::from_time_t(date.GetTicks()));
-
-						v = std::chrono::year_month_day{ days };
-					}
-					else if constexpr (std::is_same_v<std::chrono::system_clock::time_point, arg_type>)
-					{
-						auto date = variant.GetDateTime();
-						v = std::chrono::system_clock::from_time_t(date.GetTicks());
-					}
-					else if constexpr (std::is_enum_v<arg_type>)
-					{
-					}
-					else if constexpr (std::is_integral_v<arg_type>){
-						if constexpr (sizeof(arg_type) == 4) {
-							if constexpr (std::is_signed_v<arg_type>) {
-								v = variant.GetLong();
-							}
-							else {
-								v = static_cast<arg_type>(variant.GetLong());
-							}
-						}
-						else {
-							if constexpr (std::is_signed_v<arg_type>) {
-								v = variant.GetLongLong().GetValue();
-							}
-							else {
-								v = variant.GetULongLong().GetValue();
-							}
-						}
-					}
-					else if constexpr (std::is_same_v<arg_type, pof::base::currency>) {
-						auto string = variant.GetString().ToStdString();
-						v = pof::base::currency(string);
-					}
-					else if constexpr (std::is_same_v<std::string, arg_type>){
-						v = variant.GetString().ToStdString();
-					}
-					});
-					return true;
+				r[col] = variant;
+				return true;
 			}
 			catch (const std::exception& exp) {
 				spdlog::error(exp.what());

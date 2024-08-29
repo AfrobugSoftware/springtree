@@ -32,6 +32,7 @@ ab::ProductView::ProductView(wxWindow* parent, wxWindowID id, const wxPoint& pos
 ab::ProductView::~ProductView()
 {
 	mManager.UnInit();
+	mModel->Clear();
 	mModel.release();
 }
 
