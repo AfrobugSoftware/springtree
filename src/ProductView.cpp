@@ -153,56 +153,83 @@ void ab::ProductView::OnForward(wxCommandEvent& evt)
 void ab::ProductView::OnImportFormulary(wxCommandEvent& evt)
 {
 	auto& app = wxGetApp();
-	auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
-	grape::session::response_type resp{};
-	std::string target = std::format("/product/formulary/checkname/{}", app.mPharmacyManager.pharmacy.name);
-	auto fut = sess->req(http::verb::get, target, {});
-	grape::credentials cred;
-	cred.pharm_id = app.mPharmacyManager.pharmacy.id;
-	cred.branch_id = app.mPharmacyManager.branch.id;
-	cred.account_id = app.mPharmacyManager.account.account_id;
-	cred.session_id = app.mPharmacyManager.account.session_id.value();
-	constexpr const size_t size = grape::serial::get_size(cred);
+	try{
+		//read in a .form file
+		wxFileDialog fileDialog(this, "Formulary Import", wxEmptyString, wxEmptyString, "form files (*.form)|*.form", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+		if (fileDialog.ShowModal() == wxID_CANCEL)
+			return;
 
-	{
-		wxBusyInfo wait("Checking for formulary\nPlease wait...");
-		resp = fut.get();
-	}
-	if (resp.result() != http::status::not_found) {
-		bool load = wxMessageBox("This pharmacy already has a formulary\nDo you want load it?","Formulary", wxICON_INFORMATION | wxYES_NO) == wxYES;
-		if (!load) return;
-
-		//Load in formulary
-		grape::body_type body(size, 0x00);
-		grape::serial::write(boost::asio::buffer(body), cred);
-		fut = sess->req(http::verb::get, "/product/formulary/getproducts", std::move(body));
-
-		{
-			wxBusyInfo wait("Loading products from formulary\nPlease wait...");
-			resp = fut.get();
+		wxProgressDialog pdg("Loading formulary", "please wait...", 100, this, wxPD_CAN_ABORT | wxPD_SMOOTH | wxPD_APP_MODAL | wxPD_AUTO_HIDE);
+		auto filename = fs::path(fileDialog.GetPath().ToStdString());
+		if (filename.extension().string() != ".form") {
+			wxMessageBox(fmt::format("{} is not a formulary file", filename.string()), "Formulary", wxICON_WARNING | wxOK);
+			return;
 		}
-		
-		return;
-	}
+
+		std::ifstream file(filename);
+		if (!file.is_open()) {
+			wxMessageBox(fmt::format("Cannot open {} permission denied", filename.string()), "Formulary", wxICON_ERROR | wxOK);
+			return;
+		}
+		std::stringstream data;
+		data << file.rdbuf();
 
 
-	wxFileDialog fileDialog(this, "Formulary Import", wxEmptyString, wxEmptyString, "form files (*.form)|*.form",wxFD_OPEN | wxFD_FILE_MUST_EXIST);
-	if (fileDialog.ShowModal() == wxID_CANCEL)
-		return;
-	auto filename = fs::path(fileDialog.GetPath().ToStdString());
-	if (filename.extension().string() != ".form") {
-		wxMessageBox(fmt::format("{} is not a formulary file", filename.string()), "Formulary", wxICON_WARNING | wxOK);
-		return;
-	}
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+		grape::session::response_type resp{};
+		std::string target = std::format("/product/formulary/checkname/{}", app.mPharmacyManager.pharmacy.name);
+		grape::credentials cred;
+		cred.pharm_id   = app.mPharmacyManager.pharmacy.id;
+		cred.branch_id  = app.mPharmacyManager.branch.id;
+		cred.account_id = app.mPharmacyManager.account.account_id;
+		cred.session_id = app.mPharmacyManager.account.session_id.value();
+		constexpr const size_t cred_size = grape::serial::get_size(cred);
+		grape::uid_t form_id;
 
-	std::ifstream file(filename);
-	if (!file.is_open()) {
-		wxMessageBox(fmt::format("Cannot open {} permission denied", filename.string()), "Formulary", wxICON_ERROR | wxOK);
-		return;
-	}
-	std::stringstream data;
-	data << file.rdbuf();
-	try {
+		grape::body_type bt(cred_size, 0x00);
+		grape::serial::write(boost::asio::buffer(bt), cred);
+		auto fut = sess->req(http::verb::get, target, std::move(bt));
+		pdg.Update(10,"Checking for formulary...");
+		resp = fut.get();
+	
+
+		if (resp.result() == http::status::ok) {
+			auto& body = resp.body();
+			if (body.empty()) throw std::invalid_argument("expected a body");
+
+			auto&& [id, buf] = grape::serial::read<grape::uid_t>(boost::asio::buffer(body));
+			form_id = id;
+		}
+		else if (resp.result() == http::status::not_found) {
+			//create a new formulary for 
+			grape::formulary form;
+			form.id           = boost::uuids::random_generator_mt19937{}();
+			form.creator_id   = app.mPharmacyManager.pharmacy.id;
+			form.created_by   = app.mPharmacyManager.account.username;
+			form.access_level = grape::formulary_access_level::ACCESS_PRIVATE;
+			form.usage_count  = 1ull;
+			form.name         = app.mPharmacyManager.pharmacy.name;
+			form.version      = "v1.0"s;
+			const size_t size = grape::serial::get_size(form);
+			grape::body_type bf(size + cred_size, 0x00);
+			auto b = grape::serial::write(boost::asio::buffer(bf), cred);
+			auto b2 = grape::serial::write(b, form);
+
+			fut = sess->req(http::verb::post, "/product/formulary/create", std::move(bf));
+			pdg.Update(15, "Creating a formulary...");
+			resp = fut.get();
+
+
+			if (resp.result() != http::status::ok) {
+				//cannot create formulary for some reason
+				throw std::logic_error(app.ParseServerError(resp));
+			}
+			boost::fusion::at_c<0>(form_id) = form.id;
+		}
+		else if (resp.result() != http::status::ok) {
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+
 		const js::json form = js::json::parse(data.str());
 		const js::json header = form["header"];
 		const js::json products = form["products"];
@@ -216,17 +243,14 @@ void ab::ProductView::OnImportFormulary(wxCommandEvent& evt)
 			static_cast<std::string>(header["address"]),
 			p,
 			count), "Formulary import", wxICON_INFORMATION | wxOK);
-		wxProgressDialog dlg("Loading formulary", "please wait...", 100, this, wxPD_CAN_ABORT | wxPD_SMOOTH | wxPD_APP_MODAL | wxPD_AUTO_HIDE);
-
-		//create the formulary ?
-
-
 
 		std::vector<grape::product> prods;
+		std::vector<grape::pharma_product> pprods;
 		prods.reserve(products.size());
+		pprods.reserve(products.size());
 		for (const auto& prod : products) {
 			auto& p         = prods.emplace_back(grape::product{});
-			p.id            = boost::uuids::nil_uuid();
+			p.id            = boost::uuids::random_generator_mt19937{}();
 			p.serial_num    = 0;
 			p.name          = static_cast<std::string>(prod["name"]);
 			p.generic_name  = static_cast<std::string>(prod["generic_name"]);
@@ -238,8 +262,42 @@ void ab::ProductView::OnImportFormulary(wxCommandEvent& evt)
 			p.description   = static_cast<std::string>(prod["description"]);
 			p.indications   = static_cast<std::string>(prod["health_conditions"]);
 			p.sideeffects   = static_cast<std::string>(prod["side_effects"]);
+
+			//add the product to the pharmacy
+			auto& pp           = pprods.emplace_back(grape::pharma_product{});
+			pp.branch_id       = app.mPharmacyManager.branch.id;
+			pp.pharmacy_id     = app.mPharmacyManager.pharmacy.id;
+			pp.product_id	   = p.id; //set the product id in grape juice
+			pp.date_added      = std::chrono::system_clock::now();
+			pp.unitprice       = pof::base::currency(static_cast<double>(prod["unit_price"]));
+			pp.costprice       = pof::base::currency(static_cast<double>(prod["cost_price"]));
+			pp.stock_count     = 0ull;
+			pp.min_stock_count = 0ull;
 		}
 
+		grape::collection_type<grape::product> pcollect;
+		grape::collection_type<grape::pharma_product> ppcollect;
+
+		boost::fusion::at_c<0>(pcollect)  = std::move(prods);
+		boost::fusion::at_c<0>(ppcollect) = std::move(pprods);
+		const size_t ss = cred_size + grape::serial::get_size(form_id)
+			+ grape::serial::get_size(pcollect) + grape::serial::get_size(ppcollect);
+		grape::body_type bss(ss, 0x00);
+		auto bs1 = grape::serial::write(boost::asio::buffer(bss), cred);
+		auto bs2 = grape::serial::write(bs1, form_id);
+		auto bs3 = grape::serial::write(bs2, pcollect);
+		auto bs4 = grape::serial::write(bs3, ppcollect);
+
+		fut = sess->req(http::verb::post, "/products/formulary/import", std::move(bss));
+
+		pdg.Update(80, "Loading products to grape juice....");
+		resp = fut.get();
+
+		if (resp.result() != http::status::ok) {
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+
+		Load(); //reload view
 	}
 	catch (const std::exception& exp) {
 		wxMessageBox(std::format("Formulary error:\n{}", exp.what()), "Formulary", wxICON_ERROR | wxOK);
