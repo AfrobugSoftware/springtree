@@ -11,6 +11,7 @@ ab::AddProductDialog::AddProductDialog(wxWindow* parent, wxWindowID id, const wx
 	this->SetSize(FromDIP(wxSize(948, 584)));
 	this->SetSizeHints(wxDefaultSize, wxDefaultSize);
 	this->SetBackgroundColour(wxColour(255, 255, 255));
+	wxBusyCursor cusor;
 
 	wxBoxSizer* bSizer1;
 	bSizer1 = new wxBoxSizer(wxVERTICAL);

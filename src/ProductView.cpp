@@ -7,7 +7,9 @@ BEGIN_EVENT_TABLE(ab::ProductView, wxPanel)
 	EVT_UPDATE_UI(wxID_FORWARD, ab::ProductView::OnUpdateArrows)
 	EVT_UPDATE_UI(wxID_BACKWARD, ab::ProductView::OnUpdateArrows)
 	EVT_TOOL(ab::ProductView::ID_ADD_PRODUCT, ab::ProductView::OnAddProduct)
-
+	EVT_AUITOOLBAR_TOOL_DROPDOWN(ab::ProductView::ID_FORMULARY, ab::ProductView::OnFormularyToolbar)
+	EVT_MENU(ab::ProductView::ID_IMPORT_FORMULARY, ab::ProductView::OnImportFormulary)
+	EVT_MENU(ab::ProductView::ID_EXPORT_FORMULARY, ab::ProductView::OnExportFormulary)
 	EVT_DATAVIEW_ITEM_CONTEXT_MENU(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnContextMenu)
 	EVT_DATAVIEW_ITEM_ACTIVATED(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnItemActivated)
 END_EVENT_TABLE()
@@ -119,7 +121,8 @@ void ab::ProductView::CreateBottomTool()
 	mBottomTool = new wxAuiToolBar(this, ID_BOTTOM_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mBottomTool->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
 
-	mBottomTool->AddTool(ID_IMPORT_FORULARY, "Import formulary", wxArtProvider::GetBitmap("edit_not", wxART_OTHER, wxSize(16,16)));
+	mFormularyTool = mBottomTool->AddTool(ID_FORMULARY, "Formulary", wxArtProvider::GetBitmap("edit_note", wxART_OTHER, wxSize(16,16)), "Formulary");
+	mFormularyTool->SetHasDropDown(true);
 
 	mBottomTool->Realize();
 	mManager.AddPane(mBottomTool, wxAuiPaneInfo().Name("BottomToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(2).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
@@ -159,7 +162,7 @@ void ab::ProductView::OnImportFormulary(wxCommandEvent& evt)
 		if (fileDialog.ShowModal() == wxID_CANCEL)
 			return;
 
-		wxProgressDialog pdg("Loading formulary", "please wait...", 100, this, wxPD_CAN_ABORT | wxPD_SMOOTH | wxPD_APP_MODAL | wxPD_AUTO_HIDE);
+		wxProgressDialog pdg("Loading formulary", "please wait...", 100, this, wxPD_SMOOTH | wxPD_APP_MODAL | wxPD_AUTO_HIDE);
 		auto filename = fs::path(fileDialog.GetPath().ToStdString());
 		if (filename.extension().string() != ".form") {
 			wxMessageBox(fmt::format("{} is not a formulary file", filename.string()), "Formulary", wxICON_WARNING | wxOK);
@@ -244,16 +247,27 @@ void ab::ProductView::OnImportFormulary(wxCommandEvent& evt)
 			p,
 			count), "Formulary import", wxICON_INFORMATION | wxOK);
 
+		pdg.Update(30, "Loading imported formulary...");
+
+
 		std::vector<grape::product> prods;
 		std::vector<grape::pharma_product> pprods;
-		prods.reserve(products.size());
-		pprods.reserve(products.size());
+		const size_t size = products.size();
+		prods.reserve(size);
+		pprods.reserve(size);
+		int i  = 0;
+		int pg = 30;
 		for (const auto& prod : products) {
 			auto& p         = prods.emplace_back(grape::product{});
 			p.id            = boost::uuids::random_generator_mt19937{}();
 			p.serial_num    = 0;
 			p.name          = static_cast<std::string>(prod["name"]);
+			boost::trim(p.name);
+			boost::to_lower(p.name);
 			p.generic_name  = static_cast<std::string>(prod["generic_name"]);
+			boost::trim(p.generic_name);
+			boost::to_lower(p.generic_name);
+
 			p.class_        = static_cast<std::string>(prod["class"]);
 			p.formulation   = static_cast<std::string>(prod["formulation"]);
 			p.strength      = static_cast<std::string>(prod["strength"]);
@@ -273,6 +287,9 @@ void ab::ProductView::OnImportFormulary(wxCommandEvent& evt)
 			pp.costprice       = pof::base::currency(static_cast<double>(prod["cost_price"]));
 			pp.stock_count     = 0ull;
 			pp.min_stock_count = 0ull;
+
+			pg += static_cast<float>(((float)i / (float)size) * 30.f);
+			pdg.Update(pg);
 		}
 
 		grape::collection_type<grape::product> pcollect;
@@ -288,7 +305,7 @@ void ab::ProductView::OnImportFormulary(wxCommandEvent& evt)
 		auto bs3 = grape::serial::write(bs2, pcollect);
 		auto bs4 = grape::serial::write(bs3, ppcollect);
 
-		fut = sess->req(http::verb::post, "/products/formulary/import", std::move(bss));
+		fut = sess->req(http::verb::post, "/product/formulary/import", std::move(bss), 5min);
 
 		pdg.Update(80, "Loading products to grape juice....");
 		resp = fut.get();
@@ -304,6 +321,14 @@ void ab::ProductView::OnImportFormulary(wxCommandEvent& evt)
 		spdlog::error(exp.what());
 		return;
 	}
+}
+
+void ab::ProductView::OnExportFormulary(wxCommandEvent& evt)
+{
+}
+
+void ab::ProductView::OnCreateFormulary(wxCommandEvent& evt)
+{
 }
 
 void ab::ProductView::OnUpdateArrows(wxUpdateUIEvent& evt)
@@ -350,6 +375,20 @@ void ab::ProductView::OnContextMenu(wxDataViewEvent& evt)
 
 void ab::ProductView::OnItemActivated(wxDataViewEvent& evt)
 {
+}
+
+
+void ab::ProductView::OnFormularyToolbar(wxAuiToolBarEvent& evt)
+{
+	wxMenu* menu = new wxMenu;
+	menu->Append(ID_CREATE_FORMULARY, "Create", nullptr);
+	menu->Append(ID_IMPORT_FORMULARY, "Import", nullptr);
+	menu->Append(ID_EXPORT_FORMULARY, "Export", nullptr);
+
+	wxPoint pos = mFormularyTool->GetSizerItem()->GetPosition();
+	wxSize sz = mFormularyTool->GetSizerItem()->GetSize();
+
+	mBottomTool->PopupMenu(menu, wxPoint{ pos.x, pos.y + sz.y + 2 });
 }
 
 void ab::ProductView::OnWorkspaceNotification(ab::Workspace::notif notif, wxWindow* win)

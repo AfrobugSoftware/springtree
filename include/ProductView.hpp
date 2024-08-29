@@ -70,18 +70,21 @@ namespace ab {
 			ID_TOP_TOOL,
 			ID_BOTTOM_TOOL,
 			ID_SEARCH,
-			ID_IMPORT_FORULARY,
+			ID_FORMULARY,
+			ID_IMPORT_FORMULARY,
+			ID_EXPORT_FORMULARY,
 			ID_ADD_PRODUCT,
+			ID_CREATE_FORMULARY,
 		};
 
 		enum {
 			col_name = 3,
 			col_class = 5,
 			col_formulation = 6,
-			col_unit_price = 10,
-			col_cost_price = 11,
-			col_package_size = 12,
-			col_stock_count = 13,
+			col_unit_price = 11,
+			col_cost_price = 12,
+			col_package_size = 13,
+			col_stock_count = 14,
 			col_strength = 1111,
 		};
 
@@ -99,7 +102,7 @@ namespace ab {
 		void Load();
 		void Clear();
 		void LoadProducts(const grape::collection_type<grape::product>& products);
-		void SwitchPage(long page);
+	
 
 		std::set<boost::uuids::uuid> mSelections;
 
@@ -109,13 +112,15 @@ namespace ab {
 	private:
 		void OnBack(wxCommandEvent& evt);
 		void OnForward(wxCommandEvent& evt);
-		void OnImportFormulary(wxCommandEvent& evt);
 		void OnUpdateArrows(wxUpdateUIEvent& evt);
 		void OnAddProduct(wxCommandEvent& evt);
 		void OnContextMenu(wxDataViewEvent& evt);
 		void OnItemActivated(wxDataViewEvent& evt);
-
-	
+		void OnFormularyToolbar(wxAuiToolBarEvent& evt);
+		void OnImportFormulary(wxCommandEvent& evt);
+		void OnExportFormulary(wxCommandEvent& evt);
+		void OnCreateFormulary(wxCommandEvent& evt);
+		
 		
 		//grape functions 
 		void GetProducts(size_t begin, size_t limit);
@@ -146,7 +151,7 @@ namespace ab {
 		wxStaticText* mNoConnectionText = nullptr;
 		wxButton* mNoConnectionButton = nullptr;
 
-
+		wxAuiToolBarItem* mFormularyTool;
 		//wait
 		wxPanel* mWaitPanel = nullptr;
 		wxActivityIndicator* mActivity = nullptr;
