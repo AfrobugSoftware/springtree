@@ -396,6 +396,28 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(boost::uuids::uuid, session_id)
 )
 
+BOOST_FUSION_DEFINE_STRUCT(
+	(ab), pproduct,
+	(boost::uuids::uuid, id)
+	(boost::uuids::uuid, formulary_id)
+	(std::int64_t, serial_num)
+	(std::string, name)
+	(std::string, generic_name)
+	(std::string, cls)
+	(std::string, formulation)
+	(std::string, strength)
+	(std::string, strength_type)
+	(std::string, usage_info)
+	(std::string, indications)
+	(pof::base::currency, unit_price)
+	(pof::base::currency, cost_price)
+	(std::int64_t, package_size)
+	(std::int64_t, stock_count)
+	(std::string, sideeffects)
+	(std::string, barcode)
+	(std::int64_t, category_id)
+	(std::int64_t, min_stock_count)
+)
 
 namespace grape {
 	template<typename T>

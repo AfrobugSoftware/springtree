@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/lexical_cast.hpp>
 #include <functional>
 #include <boost/unordered_map.hpp>
 
@@ -32,19 +33,17 @@ namespace ab {
 				ret[i] = wxVariant("");
 			}
 			else if constexpr (std::is_same_v<arg_type, pof::base::currency>) {
-				double amount = static_cast<double>(v);
-				ret[i] = wxVariant(std::format("N {:.2f}", amount));
+				ret[i] = wxVariant(fmt::format("{:cu}", v));
 			}
 			else if constexpr (std::is_integral_v<arg_type>) {
-				if constexpr (sizeof(arg_type) == 4) {
-					ret[i] = wxVariant(v);
-				}
-				else {
-					ret[i] = wxVariant(wxLongLong(v));
-				}
+				ret[i] = wxVariant(std::to_string(v));
 			}
 			else if constexpr (std::is_same_v<std::string, arg_type>) {
 				ret[i] =  wxVariant(std::move(v));
+			}
+			else if constexpr (std::is_same_v<boost::uuids::uuid, arg_type>)
+			{
+				ret[i] = wxVariant(boost::lexical_cast<std::string>(v));
 			}
 		});
 		return ret;
@@ -55,7 +54,6 @@ namespace ab {
 	{
 		T ret{};
 		typedef boost::mpl::range_c<unsigned, 0, boost::mpl::size<T>::value> range;
-
 		boost::fusion::for_each(range(), [&](auto i) {
 			using constant = std::decay_t<decltype(i)>;
 			using arg_type = std::decay_t<decltype(boost::fusion::at<constant>(ret))>;
@@ -76,6 +74,7 @@ namespace ab {
 			}
 			else if constexpr (std::is_enum_v<arg_type>)
 			{
+
 			}
 			else if constexpr (std::is_integral_v<arg_type>) {
 				if constexpr (sizeof(arg_type) == 4) {
@@ -87,12 +86,7 @@ namespace ab {
 					}
 				}
 				else {
-					if constexpr (std::is_signed_v<arg_type>) {
-						v = variant.GetLongLong().GetValue();
-					}
-					else {
-						v = variant.GetULongLong().GetValue();
-					}
+					v = boost::lexical_cast<arg_type>(variant.GetString().ToStdString());
 				}
 			}
 			else if constexpr (std::is_same_v<arg_type, pof::base::currency>) {
@@ -140,7 +134,7 @@ namespace ab {
 
 		virtual bool GetAttrByRow(unsigned int row, unsigned int col, wxDataViewItemAttr& attr) const override
 		{
-			if (vec_base::empty()) return false;
+			if (col > col_count || vec_base::empty()) return false;
 			const auto& r = (*this)[row];
 			auto& atr = boost::fusion::at_c<1>(r);
 			attr = atr[col];
@@ -180,6 +174,14 @@ namespace ab {
 		void Clear() {
 			vec_base::clear();
 			Cleared();
+		}
+
+		constexpr std::array<wxVariant, boost::mpl::size<T>::value>& GetRow(size_t row) {
+			return 	boost::fusion::at_c<2>((*this)[row]);
+		}
+
+		constexpr const std::array<wxVariant, boost::mpl::size<T>::value>& GetRow(size_t row) const {
+			return 	boost::fusion::at_c<2>((*this)[row]);
 		}
 
 		virtual void GetValueByRow(wxVariant& variant, unsigned int row, unsigned int col) const override

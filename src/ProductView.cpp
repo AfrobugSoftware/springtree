@@ -10,13 +10,18 @@ BEGIN_EVENT_TABLE(ab::ProductView, wxPanel)
 	EVT_AUITOOLBAR_TOOL_DROPDOWN(ab::ProductView::ID_FORMULARY, ab::ProductView::OnFormularyToolbar)
 	EVT_MENU(ab::ProductView::ID_IMPORT_FORMULARY, ab::ProductView::OnImportFormulary)
 	EVT_MENU(ab::ProductView::ID_EXPORT_FORMULARY, ab::ProductView::OnExportFormulary)
+	//Search
+	EVT_SEARCH(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearch)
+	EVT_SEARCH_CANCEL(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearchCleared)
+	EVT_TEXT(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearch)
 	EVT_DATAVIEW_ITEM_CONTEXT_MENU(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnContextMenu)
 	EVT_DATAVIEW_ITEM_ACTIVATED(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnItemActivated)
+	EVT_TIMER(ab::ProductView::ID_SEARH_TIMER, ab::ProductView::OnSearchTimeOut)
 END_EVENT_TABLE()
 
 
 ab::ProductView::ProductView(wxWindow* parent, wxWindowID id, const wxPoint& position, const wxSize& size, long style)
-	:wxPanel(parent, id, position, size, style), mManager(this, ab::AuiTheme::AUIMGRSTYLE)
+	:wxPanel(parent, id, position, size, style), mManager(this, ab::AuiTheme::AUIMGRSTYLE), mSearchTimer(this, ID_SEARH_TIMER)
 {
 	SetupAuiTheme();
 	CreateBook();
@@ -65,6 +70,13 @@ void ab::ProductView::CreateView()
 	sizer->Add(mInfoBar, wxSizerFlags().Expand().Border(wxALL, FromDIP(0)));
 	sizer->Add(mView, wxSizerFlags().Expand().Proportion(1).Border(wxALL, FromDIP(0)));
 
+	ab::DataModel<ab::pproduct>::specialcol_t col;
+	col.first = [&](wxVariant& v, int row, int col) {
+		auto& arr = mModel->GetRow(row);
+		v = std::format("{} {}", arr[7].GetString().ToStdString(), arr[8].GetString().ToStdString());
+	};
+	mModel->AddSpecialCol(std::move(col), col_strength);
+
 	panel->SetSizer(sizer);
 	panel->Layout();
 	mBook->AddPage(panel, "Dataview", false);
@@ -112,7 +124,7 @@ void ab::ProductView::CreateToolBar()
 
 	mTopTool->AddControl(mSearchBar);
 	mTopTool->AddStretchSpacer();
-	mTopTool->AddTool(ID_ADD_PRODUCT, "Add Product", wxArtProvider::GetBitmap("add", wxART_OTHER,FromDIP(wxSize(16,16))));
+	mTopTool->AddTool(ID_ADD_PRODUCT, "Add Product", wxArtProvider::GetBitmap("add", wxART_OTHER,FromDIP(wxSize(16, -1))));
 	mTopTool->Realize();
 	mManager.AddPane(mTopTool, wxAuiPaneInfo().Name("TopToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(1).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
 }
@@ -122,7 +134,9 @@ void ab::ProductView::CreateBottomTool()
 	mBottomTool = new wxAuiToolBar(this, ID_BOTTOM_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mBottomTool->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
 
-	mFormularyTool = mBottomTool->AddTool(ID_FORMULARY, "Formulary", wxArtProvider::GetBitmap("edit_note", wxART_OTHER, wxSize(16,16)), "Formulary");
+	auto select    = mBottomTool->AddTool(ID_SELECT, "Select", wxArtProvider::GetBitmap("select_check", wxART_OTHER, wxSize(16, -1)));
+	mBottomTool->AddSpacer(FromDIP(10));
+	mFormularyTool = mBottomTool->AddTool(ID_FORMULARY, "Formulary", wxArtProvider::GetBitmap("edit_note", wxART_OTHER, wxSize(16,-1)), "Formulary");
 	mFormularyTool->SetHasDropDown(true);
 
 	mBottomTool->Realize();
@@ -332,6 +346,38 @@ void ab::ProductView::OnCreateFormulary(wxCommandEvent& evt)
 {
 }
 
+void ab::ProductView::OnSearchCleared(wxCommandEvent& evt)
+{
+	Load(); //reload all data
+}
+
+void ab::ProductView::OnSearchTimeOut(wxTimerEvent& evt)
+{
+	auto text = mSearchBar->GetValue().ToStdString();
+	if (text.empty()) return;
+
+	if (!mStillSearching.load()) {
+		mBook->SetSelection(WAIT);
+		mActivity->Start();
+		mWaitSearch = std::async(std::launch::async, std::bind_front(&ab::ProductView::SearchProducts, this), text);
+	}
+}
+
+void ab::ProductView::OnSelect(wxCommandEvent& evt)
+{
+}
+
+
+void ab::ProductView::OnSearch(wxCommandEvent& evt)
+{
+	auto sText = evt.GetString().ToStdString();
+	if (sText.empty()) return;
+
+	if (!mSearchTimer.IsRunning()) {
+		mSearchTimer.StartOnce(30); //wait 30ms to collect text
+	}
+}
+
 void ab::ProductView::OnUpdateArrows(wxUpdateUIEvent& evt)
 {
 	wxWindowID id = evt.GetId();
@@ -376,6 +422,12 @@ void ab::ProductView::OnContextMenu(wxDataViewEvent& evt)
 
 void ab::ProductView::OnItemActivated(wxDataViewEvent& evt)
 {
+	auto item = evt.GetItem();
+	if (!item.IsOk()) return;
+
+	auto p = ab::make_struct<ab::pproduct>
+		(mModel->GetRow(ab::DataModel<ab::pproduct>::FromDataViewItem(item)));
+
 }
 
 
@@ -458,6 +510,58 @@ void ab::ProductView::GetProducts(size_t begin, size_t limit)
 		wxMessageBox(exp.what(), "Products", wxICON_ERROR | wxOK);
 		mBook->SetSelection(SERVER_ERROR);
 	}
+}
+
+void ab::ProductView::SearchProducts(std::string sstring)
+{
+	mStillSearching = true;
+	try {
+		auto& app = wxGetApp();
+
+		grape::credentials cred;
+		cred.pharm_id   = app.mPharmacyManager.pharmacy.id;
+		cred.branch_id  = app.mPharmacyManager.branch.id;
+		cred.account_id = app.mPharmacyManager.account.account_id;
+		cred.session_id = app.mPharmacyManager.account.session_id.value();
+		
+		boost::fusion::vector<std::uint32_t, std::string> searchT;
+		boost::fusion::at_c<0>(searchT) = 0;
+		boost::fusion::at_c<1>(searchT) = sstring;
+
+		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(searchT);
+		grape::session::request_type::body_type::value_type body(size, 0x00);
+		auto buf = grape::serial::write(boost::asio::buffer(body), cred);
+		grape::serial::write(buf, searchT);
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
+			app.mNetManager.ssl());
+
+		auto fut = sess->req(http::verb::get, "/product/search", std::move(body));
+		auto resp = fut.get();
+		if (resp.result() == http::status::not_found) {
+			mBook->SetSelection(EMPTY);
+			mStillSearching = false;
+
+			return;
+		}
+
+		auto& b = resp.body();
+		if (b.empty()) throw std::logic_error("no data receievd");
+		auto&& [col, buf2] = grape::serial::read<grape::collection_type<ab::pproduct>>(boost::asio::buffer(b));
+
+		mView->Freeze();
+		mModel->Reload(boost::fusion::at_c<0>(col));
+		mView->Thaw();
+
+		mActivity->Stop();
+		mBook->SetSelection(VIEW);
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(exp.what());
+		//wxMessageBox(exp.what(), "Search products", wxICON_ERROR | wxOK);
+		mNoConnectionText->SetLabel(exp.what());
+		mBook->SetSelection(SERVER_ERROR);
+	}
+	mStillSearching = false;
 }
 
 void ab::ProductView::SetupAuiTheme()

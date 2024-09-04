@@ -18,6 +18,7 @@
 #include <future>
 #include <set>
 #include <chrono>
+#include <condition_variable>
 
 
 #include "AuiTheme.hpp"
@@ -26,30 +27,6 @@
 #include "Grape.hpp"
 #include "Workspace.hpp"
 #include "AddProduct.hpp"
-
-
-BOOST_FUSION_DEFINE_STRUCT(
-	(ab), pproduct,
-	(boost::uuids::uuid, id)
-	(boost::uuids::uuid, formulary_id)
-	(std::int64_t, serial_num)
-	(std::string, name)
-	(std::string, generic_name)
-	(std::string, cls)
-	(std::string, formulation)
-	(std::string, strength)
-	(std::string, strength_type)
-	(std::string, usage_info)
-	(std::string, indications)
-	(pof::base::currency, unit_price)
-	(pof::base::currency, cost_price)
-	(std::int64_t, package_size)
-	(std::int64_t, stock_count)
-	(std::string, sideeffects)
-	(std::string, barcode)
-	(std::int64_t, category_id)
-	(std::int64_t, min_stock_count)
-)
 
 
 namespace ab {
@@ -75,6 +52,8 @@ namespace ab {
 			ID_EXPORT_FORMULARY,
 			ID_ADD_PRODUCT,
 			ID_CREATE_FORMULARY,
+			ID_SEARH_TIMER,
+			ID_SELECT,
 		};
 
 		enum {
@@ -109,6 +88,8 @@ namespace ab {
 		//notification
 		void OnWorkspaceNotification(ab::Workspace::notif notif,
 			wxWindow* win);
+
+		std::set<boost::uuids::uuid> mProductSelect;
 	private:
 		void OnBack(wxCommandEvent& evt);
 		void OnForward(wxCommandEvent& evt);
@@ -120,11 +101,13 @@ namespace ab {
 		void OnImportFormulary(wxCommandEvent& evt);
 		void OnExportFormulary(wxCommandEvent& evt);
 		void OnCreateFormulary(wxCommandEvent& evt);
-		
-		
+		void OnSearch(wxCommandEvent& evt);
+		void OnSearchCleared(wxCommandEvent& evt);
+		void OnSearchTimeOut(wxTimerEvent& evt);
+		void OnSelect(wxCommandEvent& evt);
 		//grape functions 
 		void GetProducts(size_t begin, size_t limit);
-		
+		void SearchProducts(std::string sstring);
 
 
 		void SetupAuiTheme();
@@ -160,6 +143,10 @@ namespace ab {
 		std::unique_ptr<ab::DataModel<ab::pproduct>> mModel;
 		std::unique_ptr<ab::DataModel<grape::inventory>> mInventoryModel;
 		
+		std::future<void> mWaitSearch;
+		std::atomic<bool> mStillSearching = false;
+		wxTimer mSearchTimer;
+
 		std::stack<long> mPageStack;
 		DECLARE_EVENT_TABLE()
 	};
