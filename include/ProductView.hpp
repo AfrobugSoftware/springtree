@@ -27,7 +27,7 @@
 #include "Grape.hpp"
 #include "Workspace.hpp"
 #include "AddProduct.hpp"
-
+#include "ProductInfo.hpp"
 
 namespace ab {
 	class ProductView : public wxPanel {
@@ -77,6 +77,7 @@ namespace ab {
 		void CreatePanels();
 		void CreateToolBar();
 		void CreateBottomTool();
+		void CreateProductInfo();
 
 		void Load();
 		void Clear();
@@ -123,6 +124,9 @@ namespace ab {
 		wxAuiToolBarItem* mBack = nullptr;
 		wxAuiToolBarItem* mForward = nullptr;
 		wxInfoBar* mInfoBar = nullptr;
+
+		//product info
+		ab::ProductInfo* mProductInfo = nullptr;
 
 		//empty
 		wxPanel* mEmptyPanel = nullptr;

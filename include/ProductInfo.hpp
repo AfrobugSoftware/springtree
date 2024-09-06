@@ -5,12 +5,12 @@
 #include <wx/propgrid/manager.h>
 #include <wx/propgrid/advprops.h>
 #include <wx/splitter.h>
+#include <wx/dateevt.h>
 #include <wx/datectrl.h>
 #include <wx/dialog.h>
 #include <wx/aui/aui.h>
 #include <wx/dataview.h>
 #include <wx/toolbar.h>
-
 #include <functional>
 #include "Grape.hpp"
 #include "DataModel.hpp"
@@ -43,35 +43,32 @@ namespace ab {
 
 		
 		ProductInfo(wxWindow* parent, wxWindowID id, const wxPoint& position = wxDefaultPosition, const wxSize& size = wxDefaultSize, long style = wxTAB_TRAVERSAL | wxNO_BORDER);
-		virtual ~ProductInfo() = default;
+		virtual ~ProductInfo();
 	
 		void SetupAuitheme();
 		void OnAuiThemeChange();
 
 		void CreateMainTool();
-		void CreateNotebook();
 		void CreateInventoryView();
 		void CreateHistoryView();
 		void CreateProperyGrid();
 		void CreateWarnings();
 
-
+		void OnDateChange(wxDateEvent& evt);
 		void OnAddBarcode(wxCommandEvent& evt);
 		void OnPropertyChanging(wxPropertyGridEvent& evt);
 		//void OnBack(wxCommandEvent& evt);
 		void OnHistory(wxCommandEvent& evt);
 		void OnProductProperty(wxCommandEvent& evt);
 		void OnAddStock(wxCommandEvent& evt);
-		void OnAddBarcode(wxCommandEvent& evt);
 		void OnCacheHint(wxDataViewEvent& evt);
-		void OnDateChange(wxDateEvent& evt);
+
 
 		void GetInventory(size_t begin, size_t limit);
 		void GetHistory(size_t begin, size_t limit);
 		void GetProductFormulary();
 
 		wxAuiManager mManager;
-		wxAuiNotebook* mNotebook;
 		wxAuiToolBar* mMainToolbar;
 
 
@@ -100,39 +97,18 @@ namespace ab {
 		wxDataViewColumn* mExpiryDate;
 		wxDataViewColumn* mStockCount;
 		wxDataViewColumn* mManuFactureName;
-		
+		std::unique_ptr<ab::DataModel<grape::sale_history>> mHistModel;
+
 		wxPropertyGridManager* mProductInfoGridManager;
 		wxPropertyGridPage* mProductInfoPage;
-		wxPGProperty* m_propertyGridItem1;
-		wxPGProperty* mNameItem;
-		wxPGProperty* mGenericNameItem;
-		wxPGProperty* mPackageSizeItem;
-		wxPGProperty* mProductClass;
-		wxPGProperty* mFormulationItem;
-		wxPGProperty* mStrengthValueItem;
-		wxPGProperty* mStrengthTypeItem;
-		wxPGProperty* mMoreProductInfo;
-		wxPGProperty* mDirForUse;
-		wxPGProperty* mHealthCond;
-		wxPGProperty* mProductDescription;
-		wxPGProperty* mSideEffects;
-		wxPGProperty* mSettings;
-		wxPGProperty* mMinStockCount;
-		wxPGProperty* mExpDateCount;
-		wxPGProperty* mExpDatePeriod;
-		wxPGProperty* mSaleSettings;
-		wxPGProperty* mUnitPrice;
-		wxPGProperty* mCostPrice;
-		wxPGProperty* mBarcode;
-		wxPGProperty* mCurStock;
-		wxDatePickerCtrl* mInventoryDate;
+	
+		std::array<wxPGProperty*, 14> p;
 		wxPGChoices ProductClassChoices;
 		wxPGChoices FormulationChoices;
 		wxPGChoices ExpChoices;
 		wxPGChoices StrengthChoices;
 		
 		wxPanel* mEmpty = nullptr;
-
 
 
 		DECLARE_EVENT_TABLE();

@@ -31,6 +31,8 @@ ab::ProductView::ProductView(wxWindow* parent, wxWindowID id, const wxPoint& pos
 
 
 	CreateView();
+	CreateProductInfo();
+
 	mManager.Update();
 }
 
@@ -124,7 +126,7 @@ void ab::ProductView::CreateToolBar()
 
 	mTopTool->AddControl(mSearchBar);
 	mTopTool->AddStretchSpacer();
-	mTopTool->AddTool(ID_ADD_PRODUCT, "Add Product", wxArtProvider::GetBitmap("add", wxART_OTHER,FromDIP(wxSize(16, -1))));
+	mTopTool->AddTool(ID_ADD_PRODUCT, "Add Product", wxArtProvider::GetBitmap("add", wxART_OTHER,FromDIP(wxSize(16, 16))));
 	mTopTool->Realize();
 	mManager.AddPane(mTopTool, wxAuiPaneInfo().Name("TopToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(1).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
 }
@@ -134,13 +136,19 @@ void ab::ProductView::CreateBottomTool()
 	mBottomTool = new wxAuiToolBar(this, ID_BOTTOM_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mBottomTool->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
 
-	auto select    = mBottomTool->AddTool(ID_SELECT, "Select", wxArtProvider::GetBitmap("select_check", wxART_OTHER, wxSize(16, -1)));
+	auto select    = mBottomTool->AddTool(ID_SELECT, "Select", wxArtProvider::GetBitmap("select_check", wxART_OTHER, wxSize(16, 16)));
 	mBottomTool->AddSpacer(FromDIP(10));
-	mFormularyTool = mBottomTool->AddTool(ID_FORMULARY, "Formulary", wxArtProvider::GetBitmap("edit_note", wxART_OTHER, wxSize(16,-1)), "Formulary");
+	mFormularyTool = mBottomTool->AddTool(ID_FORMULARY, "Formulary", wxArtProvider::GetBitmap("edit_note", wxART_OTHER, wxSize(16, 16)), "Formulary");
 	mFormularyTool->SetHasDropDown(true);
 
 	mBottomTool->Realize();
 	mManager.AddPane(mBottomTool, wxAuiPaneInfo().Name("BottomToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(2).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
+}
+
+void ab::ProductView::CreateProductInfo()
+{
+	mProductInfo = new ab::ProductInfo(mBook, wxID_ANY);
+	mBook->AddPage(mProductInfo, "Product info", false);
 }
 
 void ab::ProductView::Load()

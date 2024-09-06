@@ -90,7 +90,7 @@ ab::Modules::Modules(wxWindow* parent, wxWindowID id, const wxPoint& pos, const 
 
 	mModuleTree = new wxTreeCtrl(m_panel2, ID_TREE, wxDefaultPosition, wxDefaultSize, wxTR_EDIT_LABELS | wxTR_FULL_ROW_HIGHLIGHT | wxTR_NO_LINES | wxTR_LINES_AT_ROOT | wxTR_HIDE_ROOT | wxTR_SINGLE | wxNO_BORDER | wxTR_HAS_VARIABLE_ROW_HEIGHT);
 	bSizer3->AddSpacer(FromDIP(10));
-	bSizer3->Add(mModuleTree, wxSizerFlags().Expand().Proportion(1).CenterHorizontal().Border(wxALL,FromDIP(10)));
+	bSizer3->Add(mModuleTree, wxSizerFlags().Expand().Proportion(1).Border(wxALL,FromDIP(10)));
 	mModuleTree->SetDoubleBuffered(true);
 	mModuleTree->SetBackgroundColour(wxTheColourDatabase->Find("module"));
 

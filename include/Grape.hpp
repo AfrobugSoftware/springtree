@@ -419,6 +419,15 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(std::int64_t, min_stock_count)
 )
 
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape), sale_history,
+	(boost::uuids::uuid, sale_id)
+	(boost::uuids::uuid, prod_id)
+	(std::int64_t, sale_quantity)
+	(pof::base::currency, total_amt)
+	(std::string, username)
+)
+
 namespace grape {
 	template<typename T>
 		requires grape::FusionStruct<T>
