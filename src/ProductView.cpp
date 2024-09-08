@@ -148,6 +148,17 @@ void ab::ProductView::CreateBottomTool()
 void ab::ProductView::CreateProductInfo()
 {
 	mProductInfo = new ab::ProductInfo(mBook, wxID_ANY);
+	mProductInfo->mOnBack = [&]() {
+		auto& toptool = mManager.GetPane("TopToolBar");
+		auto& bottoll = mManager.GetPane("BottomToolBar");
+		if (!toptool.IsOk() || !bottoll.IsOk()) return;
+		toptool.Show(true);
+		bottoll.Show(true);
+		mManager.Update();
+
+		mProductInfo->UnLoad();
+		Load(); //reload the view
+	};
 	mBook->AddPage(mProductInfo, "Product info", false);
 }
 
@@ -169,7 +180,25 @@ void ab::ProductView::LoadProducts(const grape::collection_type<grape::product>&
 
 void ab::ProductView::OnBack(wxCommandEvent& evt)
 {
+	int sel = mBook->GetSelection();
+	switch (sel)
+	{
+	case ab::ProductView::INFO:
+	{
+		auto& toptool = mManager.GetPane("TopToolBar");
+		auto& bottoll = mManager.GetPane("BottomToolBar");
+		if (!toptool.IsOk() || !bottoll.IsOk()) return;
+		toptool.Show(false);
+		bottoll.Show(false);
+		mManager.Update();
 
+		mProductInfo->UnLoad();
+		Load(); //reload the view
+		break;
+	}
+	default:
+		break;
+	}
 }
 
 void ab::ProductView::OnForward(wxCommandEvent& evt)
@@ -393,13 +422,8 @@ void ab::ProductView::OnUpdateArrows(wxUpdateUIEvent& evt)
 	{
 	case wxID_BACKWARD:
 	{
-		//
-		if (mPageStack.size() < 2) {
-			mBack->SetActive(false);
-		}
-		else {
-			mBack->SetActive(true);
-		}
+		auto sel = mBook->GetSelection();
+		mBack->SetActive(sel == INFO);
 	}
 	break;
 
@@ -430,12 +454,23 @@ void ab::ProductView::OnContextMenu(wxDataViewEvent& evt)
 
 void ab::ProductView::OnItemActivated(wxDataViewEvent& evt)
 {
+	wxBusyCursor cusor;
 	auto item = evt.GetItem();
 	if (!item.IsOk()) return;
 
-	auto p = ab::make_struct<ab::pproduct>
-		(mModel->GetRow(ab::DataModel<ab::pproduct>::FromDataViewItem(item)));
+	//hide toobars
+	auto& toptool = mManager.GetPane("TopToolBar");
+	auto& bottoll = mManager.GetPane("BottomToolBar");
+	if (!toptool.IsOk() || !bottoll.IsOk()) return;
+	toptool.Show(false);
+	bottoll.Show(false);
+	mManager.Update();
 
+	mProductInfo->mSelectedProduct = ab::make_struct<ab::pproduct>
+		(mModel->GetRow(ab::DataModel<ab::pproduct>::FromDataViewItem(item)));
+	mProductInfo->Load();
+
+	mBook->SetSelection(INFO);
 }
 
 
@@ -508,7 +543,9 @@ void ab::ProductView::GetProducts(size_t begin, size_t limit)
 		if (b.empty()) throw std::logic_error("no data receievd");
 		auto&& [col, buf2] = grape::serial::read<grape::collection_type<ab::pproduct>>(boost::asio::buffer(b));
 		
+		mView->Freeze();
 		mModel->Reload(boost::fusion::at_c<0>(col));
+		mView->Thaw();
 
 		mActivity->Stop();
 		mBook->SetSelection(VIEW);

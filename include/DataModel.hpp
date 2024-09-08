@@ -8,7 +8,6 @@
 #include "serialiser.h"
 
 namespace ab {
-
 	template<grape::FusionStruct T>
 	auto make_variant(T&& value) -> std::array<wxVariant, boost::mpl::size<T>::value>
 	{
@@ -96,6 +95,9 @@ namespace ab {
 			else if constexpr (std::is_same_v<std::string, arg_type>) {
 				v = variant.GetString().ToStdString();
 			}
+			else if constexpr (std::is_same_v<boost::uuids::uuid, arg_type>) {
+				v = boost::lexical_cast<boost::uuids::uuid>(variant.GetString().ToStdString());
+			}
 		});
 		return ret;
 	}
@@ -167,7 +169,7 @@ namespace ab {
 				ItemAdded(ToDataViewItem(idx), ToDataViewItem(0));
 				idx++;
 			}
-			Reset(items.size());
+			//Reset(items.size());
 		}
 
 

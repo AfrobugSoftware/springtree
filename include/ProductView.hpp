@@ -106,6 +106,8 @@ namespace ab {
 		void OnSearchCleared(wxCommandEvent& evt);
 		void OnSearchTimeOut(wxTimerEvent& evt);
 		void OnSelect(wxCommandEvent& evt);
+		
+
 		//grape functions 
 		void GetProducts(size_t begin, size_t limit);
 		void SearchProducts(std::string sstring);
