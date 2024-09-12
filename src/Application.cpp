@@ -86,6 +86,7 @@ bool ab::Application::OnInit()
 int ab::Application::OnExit()
 {
 	mNetManager.stop();
+	mTaskManager.tp().stop();
 	return 0;
 }
 

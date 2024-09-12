@@ -10,12 +10,14 @@ BEGIN_EVENT_TABLE(ab::ProductView, wxPanel)
 	EVT_AUITOOLBAR_TOOL_DROPDOWN(ab::ProductView::ID_FORMULARY, ab::ProductView::OnFormularyToolbar)
 	EVT_MENU(ab::ProductView::ID_IMPORT_FORMULARY, ab::ProductView::OnImportFormulary)
 	EVT_MENU(ab::ProductView::ID_EXPORT_FORMULARY, ab::ProductView::OnExportFormulary)
+	EVT_UPDATE_UI(ab::ProductView::ID_BOOK, ab::ProductView::OnUpdateBook)
 	//Search
 	EVT_SEARCH(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearch)
 	EVT_SEARCH_CANCEL(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearchCleared)
 	EVT_TEXT(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearch)
 	EVT_DATAVIEW_ITEM_CONTEXT_MENU(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnContextMenu)
 	EVT_DATAVIEW_ITEM_ACTIVATED(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnItemActivated)
+	EVT_DATAVIEW_CACHE_HINT(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnCacheHint)
 	EVT_TIMER(ab::ProductView::ID_SEARH_TIMER, ab::ProductView::OnSearchTimeOut)
 END_EVENT_TABLE()
 
@@ -136,7 +138,7 @@ void ab::ProductView::CreateBottomTool()
 	mBottomTool = new wxAuiToolBar(this, ID_BOTTOM_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mBottomTool->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
 
-	auto select    = mBottomTool->AddTool(ID_SELECT, "Select", wxArtProvider::GetBitmap("select_check", wxART_OTHER, wxSize(16, 16)));
+	auto select   = mBottomTool->AddTool(ID_SELECT, "Select", wxArtProvider::GetBitmap("select_check", wxART_OTHER, wxSize(16, 16)));
 	mBottomTool->AddSpacer(FromDIP(10));
 	mFormularyTool = mBottomTool->AddTool(ID_FORMULARY, "Formulary", wxArtProvider::GetBitmap("edit_note", wxART_OTHER, wxSize(16, 16)), "Formulary");
 	mFormularyTool->SetHasDropDown(true);
@@ -157,16 +159,20 @@ void ab::ProductView::CreateProductInfo()
 		mManager.Update();
 
 		mProductInfo->UnLoad();
-		Load(); //reload the view
+		mBook->SetSelection(VIEW);
 	};
 	mBook->AddPage(mProductInfo, "Product info", false);
 }
 
 void ab::ProductView::Load()
 {
+	//mBook->SetSelection(VIEW);
+	size_t limit = mView->GetCountPerPage();
+	if (limit == 0) limit = 22;
 	mBook->SetSelection(WAIT);
 	mActivity->Start();
-	mWaitProducts = std::async(std::launch::async,std::bind_front(&ab::ProductView::GetProducts, this), 0, 1000);
+	boost::asio::post(wxGetApp().mTaskManager.tp(), 
+		std::bind(&ab::ProductView::GetProducts, this, 0, limit));
 }
 
 void ab::ProductView::Clear()
@@ -180,29 +186,24 @@ void ab::ProductView::LoadProducts(const grape::collection_type<grape::product>&
 
 void ab::ProductView::OnBack(wxCommandEvent& evt)
 {
-	int sel = mBook->GetSelection();
-	switch (sel)
-	{
-	case ab::ProductView::INFO:
-	{
-		auto& toptool = mManager.GetPane("TopToolBar");
-		auto& bottoll = mManager.GetPane("BottomToolBar");
-		if (!toptool.IsOk() || !bottoll.IsOk()) return;
-		toptool.Show(false);
-		bottoll.Show(false);
-		mManager.Update();
+	if (mPageStack.empty() || mPageStack.size() == 1 || !mSearchBar->IsEmpty()) return;
+	auto top = mPageStack.top();
+	mPageStack.pop();
 
-		mProductInfo->UnLoad();
-		Load(); //reload the view
-		break;
-	}
-	default:
-		break;
-	}
+	boost::asio::post(wxGetApp().mTaskManager.tp(),
+		std::bind(&ab::ProductView::GetProducts, this, top.first, top.second - top.first));
 }
 
 void ab::ProductView::OnForward(wxCommandEvent& evt)
 {
+	if (mPageStack.empty() || !mSearchBar->IsEmpty()) return;
+	auto& curTop = mPageStack.top();
+	auto newRange = std::make_pair(curTop.first - mView->GetCountPerPage(), mView->GetCountPerPage());
+
+	boost::asio::post(wxGetApp().mTaskManager.tp(),
+		std::bind(&ab::ProductView::GetProducts, this, newRange.first, newRange.second - newRange.first));
+	mPageStack.push(newRange);
+
 }
 
 void ab::ProductView::OnImportFormulary(wxCommandEvent& evt)
@@ -396,7 +397,8 @@ void ab::ProductView::OnSearchTimeOut(wxTimerEvent& evt)
 	if (!mStillSearching.load()) {
 		mBook->SetSelection(WAIT);
 		mActivity->Start();
-		mWaitSearch = std::async(std::launch::async, std::bind_front(&ab::ProductView::SearchProducts, this), text);
+		boost::asio::post(wxGetApp().mTaskManager.tp(),
+			std::bind_front(&ab::ProductView::SearchProducts, this, std::move(text)));
 	}
 }
 
@@ -404,11 +406,19 @@ void ab::ProductView::OnSelect(wxCommandEvent& evt)
 {
 }
 
+void ab::ProductView::OnUpdateBook(wxUpdateUIEvent& evt)
+{
+
+}
+
 
 void ab::ProductView::OnSearch(wxCommandEvent& evt)
 {
 	auto sText = evt.GetString().ToStdString();
-	if (sText.empty()) return;
+	if (sText.empty()) {
+		//reload
+		return Load();	
+	}
 
 	if (!mSearchTimer.IsRunning()) {
 		mSearchTimer.StartOnce(30); //wait 30ms to collect text
@@ -450,6 +460,27 @@ void ab::ProductView::OnContextMenu(wxDataViewEvent& evt)
 
 
 	mView->PopupMenu(menu);
+}
+
+void ab::ProductView::OnCacheHint(wxDataViewEvent& evt)
+{
+	size_t from = evt.GetCacheFrom();
+	size_t to = evt.GetCacheTo();
+	size_t count = to - from;
+
+	spdlog::info("from {:d} To {:d}", from , to);
+	if (mModel->size() >= to) 
+		return;
+	if (from < mModel->size()) 
+		from = mModel->size();
+
+	size_t viewSize = mView->GetCountPerPage();
+	if (count < viewSize) 
+		count = viewSize;
+
+	boost::asio::post(wxGetApp().mTaskManager.tp(), 
+		std::bind(&ab::ProductView::AppendProducts, this, from, count));
+
 }
 
 void ab::ProductView::OnItemActivated(wxDataViewEvent& evt)
@@ -513,15 +544,20 @@ void ab::ProductView::GetProducts(size_t begin, size_t limit)
 {
 	auto& app = wxGetApp();
 	try {
+		if (mProductCount.load() == -1) {
+			GetProductCount();
+		}
+
 		auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
 			app.mNetManager.ssl());
 		grape::credentials cred;
-		cred.pharm_id = app.mPharmacyManager.pharmacy.id;
-		cred.branch_id = app.mPharmacyManager.branch.id;
+		cred.pharm_id   = app.mPharmacyManager.pharmacy.id;
+		cred.branch_id  = app.mPharmacyManager.branch.id;
 		cred.account_id = app.mPharmacyManager.account.account_id;
 		cred.session_id = app.mPharmacyManager.account.session_id.value();
 
 		grape::page page;
+
 		page.begin = begin;
 		page.limit = limit;
 
@@ -544,20 +580,63 @@ void ab::ProductView::GetProducts(size_t begin, size_t limit)
 		auto&& [col, buf2] = grape::serial::read<grape::collection_type<ab::pproduct>>(boost::asio::buffer(b));
 		
 		mView->Freeze();
-		mModel->Reload(boost::fusion::at_c<0>(col));
+		mModel->Reload(boost::fusion::at_c<0>(col), begin, begin + limit, mProductCount.load());
+
 		mView->Thaw();
 
 		mActivity->Stop();
 		mBook->SetSelection(VIEW);
 	}
 	catch (const std::exception& exp) {
-		spdlog::error(exp.what());
+		spdlog::error(std::format("{} :{}", std::source_location::current(), exp.what()));
 		wxMessageBox(exp.what(), "Products", wxICON_ERROR | wxOK);
 		mBook->SetSelection(SERVER_ERROR);
 	}
 }
 
-void ab::ProductView::SearchProducts(std::string sstring)
+void ab::ProductView::AppendProducts(size_t from, size_t to)
+{
+	auto& app = wxGetApp();
+	try {
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
+			app.mNetManager.ssl());
+		grape::credentials cred;
+		cred.pharm_id   = app.mPharmacyManager.pharmacy.id;
+		cred.branch_id  = app.mPharmacyManager.branch.id;
+		cred.account_id = app.mPharmacyManager.account.account_id;
+		cred.session_id = app.mPharmacyManager.account.session_id.value();
+		grape::page page{ (std::uint32_t)from, (std::uint32_t)to};
+
+		constexpr const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(page);
+		grape::session::request_type::body_type::value_type body(size, 0x00);
+		auto buf = grape::serial::write(boost::asio::buffer(body), cred);
+		grape::serial::write(buf, page);
+
+		auto fut = sess->req(http::verb::get, "/product/get"s, std::move(body));
+		auto resp = fut.get();
+		if (resp.result() == http::status::not_found) {
+			return;
+		}
+		else if (resp.result() != http::status::ok) {
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+
+		auto& b = resp.body();
+		if (b.empty()) throw std::logic_error("no data receievd");
+		auto&& [col, buf2] = grape::serial::read<grape::collection_type<ab::pproduct>>(boost::asio::buffer(b));
+
+		//mView->Freeze();
+		mModel->Append(boost::fusion::at_c<0>(col));
+		//mView->Thaw();
+
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(std::format("{} :{}", std::source_location::current(), exp.what()));
+		wxMessageBox(std::format("Cannot load more data {}", exp.what()), "Products", wxICON_ERROR | wxOK);
+	}
+}
+
+void ab::ProductView::SearchProducts(std::string&& sstring)
 {
 	mStillSearching = true;
 	try {
@@ -569,32 +648,28 @@ void ab::ProductView::SearchProducts(std::string sstring)
 		cred.account_id = app.mPharmacyManager.account.account_id;
 		cred.session_id = app.mPharmacyManager.account.session_id.value();
 		
-		boost::fusion::vector<std::uint32_t, std::string> searchT;
-		boost::fusion::at_c<0>(searchT) = 0;
-		boost::fusion::at_c<1>(searchT) = sstring;
 
+		boost::fusion::vector<std::uint32_t, std::string> searchT{ 0ul, std::forward<std::string>(sstring) };
 		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(searchT);
 		grape::session::request_type::body_type::value_type body(size, 0x00);
 		auto buf = grape::serial::write(boost::asio::buffer(body), cred);
 		grape::serial::write(buf, searchT);
-		auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
-			app.mNetManager.ssl());
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
 
 		auto fut = sess->req(http::verb::get, "/product/search", std::move(body));
 		auto resp = fut.get();
 		if (resp.result() == http::status::not_found) {
 			mBook->SetSelection(EMPTY);
 			mStillSearching = false;
-
 			return;
 		}
 
 		auto& b = resp.body();
 		if (b.empty()) throw std::logic_error("no data receievd");
 		auto&& [col, buf2] = grape::serial::read<grape::collection_type<ab::pproduct>>(boost::asio::buffer(b));
-
+		auto& c = boost::fusion::at_c<0>(col);
 		mView->Freeze();
-		mModel->Reload(boost::fusion::at_c<0>(col));
+		mModel->Reload(c, 0, c.size(), c.size());
 		mView->Thaw();
 
 		mActivity->Stop();
@@ -607,6 +682,40 @@ void ab::ProductView::SearchProducts(std::string sstring)
 		mBook->SetSelection(SERVER_ERROR);
 	}
 	mStillSearching = false;
+}
+
+void ab::ProductView::GetProductCount()
+{
+	auto& app = wxGetApp();
+	try {
+		grape::credentials cred;
+		cred.pharm_id   = app.mPharmacyManager.pharmacy.id;
+		cred.branch_id  = app.mPharmacyManager.branch.id;
+		cred.account_id = app.mPharmacyManager.account.account_id;
+		cred.session_id = app.mPharmacyManager.account.session_id.value();
+
+		const size_t size = grape::serial::get_size(cred);
+		grape::session::request_type::body_type::value_type body(size, 0x00);
+		auto buf = grape::serial::write(boost::asio::buffer(body), cred);
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+		auto fut = sess->req(http::verb::get, "/product/count", std::move(body));
+		auto resp = fut.get();
+
+		if (resp.result() == http::status::not_found) mProductCount = 0ll;
+		else if (resp.result() != http::status::ok)
+			throw std::logic_error(app.ParseServerError(resp));
+
+		auto& rbody = resp.body();
+		if (rbody.empty())
+			throw std::logic_error("No count received");
+
+		auto&& [count, rbuf] = grape::serial::read<boost::fusion::vector<std::int64_t>>(boost::asio::buffer(rbody));
+		mProductCount = boost::fusion::at_c<0>(count);
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(std::format("{}: {}", std::source_location::current(), exp.what()));
+		std::rethrow_exception(std::current_exception());
+	}
 }
 
 void ab::ProductView::SetupAuiTheme()

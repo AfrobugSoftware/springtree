@@ -97,6 +97,7 @@ namespace ab {
 		void OnUpdateArrows(wxUpdateUIEvent& evt);
 		void OnAddProduct(wxCommandEvent& evt);
 		void OnContextMenu(wxDataViewEvent& evt);
+		void OnCacheHint(wxDataViewEvent& evt);
 		void OnItemActivated(wxDataViewEvent& evt);
 		void OnFormularyToolbar(wxAuiToolBarEvent& evt);
 		void OnImportFormulary(wxCommandEvent& evt);
@@ -106,12 +107,14 @@ namespace ab {
 		void OnSearchCleared(wxCommandEvent& evt);
 		void OnSearchTimeOut(wxTimerEvent& evt);
 		void OnSelect(wxCommandEvent& evt);
+		void OnUpdateBook(wxUpdateUIEvent& evt);
 		
 
 		//grape functions 
 		void GetProducts(size_t begin, size_t limit);
-		void SearchProducts(std::string sstring);
-
+		void AppendProducts(size_t from, size_t to);
+		void SearchProducts(std::string&& sstring);
+		void GetProductCount();
 
 		void SetupAuiTheme();
 		void OnAuiThemeChange();
@@ -125,6 +128,7 @@ namespace ab {
 		wxSearchCtrl* mSearchBar = nullptr;
 		wxAuiToolBarItem* mBack = nullptr;
 		wxAuiToolBarItem* mForward = nullptr;
+		wxDataViewColumn* mSelectCol = nullptr;
 		wxInfoBar* mInfoBar = nullptr;
 
 		//product info
@@ -144,16 +148,18 @@ namespace ab {
 		//wait
 		wxPanel* mWaitPanel = nullptr;
 		wxActivityIndicator* mActivity = nullptr;
-		std::future<void> mWaitProducts;
 
 		std::unique_ptr<ab::DataModel<ab::pproduct>> mModel;
 		std::unique_ptr<ab::DataModel<grape::inventory>> mInventoryModel;
 		
-		std::future<void> mWaitSearch;
+		using page_range = std::pair<size_t, size_t>;
 		std::atomic<bool> mStillSearching = false;
+		std::atomic<std::int64_t> mProductCount = -1;
+		std::stack<page_range> mPageStack;
+
+
 		wxTimer mSearchTimer;
 
-		std::stack<long> mPageStack;
 		DECLARE_EVENT_TABLE()
 	};
 

@@ -29,6 +29,7 @@
 #include "Authentication.hpp"
 
 #include "net.h"
+#include "taskmanager.h"
 #include "netmanager.h"
 #include "Grape.hpp"
 
@@ -36,12 +37,25 @@
 #include <spdlog/sinks/basic_file_sink.h>
 
 #include <regex>
+#include <source_location>
+#include <format>
 #include <boost/lexical_cast.hpp>
 
 
 namespace js = nlohmann;
 namespace fs = std::filesystem;
 using namespace std::literals::string_literals;
+
+//formatter for the source location
+template<>
+struct std::formatter<std::source_location> : std::formatter<std::string> {
+	template<typename FormatContext>
+	auto format(std::source_location& e, FormatContext& ctx) const {
+		return std::format_to(ctx.out(), "{} ({:d}:{:d}) : {}",
+			e.file_name(),e.line(), e.column(), e.function_name());
+	}
+};
+
 namespace ab {
 
 	class RegexValidator : public wxTextValidator
@@ -84,6 +98,7 @@ namespace ab {
 
 		ab::PharmacyManager mPharmacyManager;
 		pof::base::net_manager mNetManager;
+		pof::base::task_manager mTaskManager;
 		std::string gVersion;
 
 		//creation functions for test

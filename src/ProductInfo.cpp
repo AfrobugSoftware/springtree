@@ -106,6 +106,18 @@ void ab::ProductInfo::CreateInventoryView()
 	mInventoryView->AssociateModel(mInventoryModel.get());
 	mInventoryModel->DecRef();
 
+	//mInventoryView->AppendDateColumn(wxT("Input Date"), 5, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	//mInventoryView->AppendDateColumn(wxT("Expiry Date"), 4, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mInventoryView->AppendTextColumn(wxT("Stock count"), 6, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mInventoryView->AppendTextColumn(wxT("Cost Price"), 7, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+
+	ab::DataModel<grape::inventory>::specialcol_t col;
+	col.first = [&](wxVariant& v, int row, int col) {
+		auto& arr = mInventoryModel->GetRow(row);
+		v = boost::lexical_cast<std::string>(arr[col].GetLongLong().GetValue());
+	};
+	mInventoryModel->AddSpecialCol(std::move(col), 6);
+
 	bsz->Add(mInventoryToolbar, wxSizerFlags().Expand().Border(wxALL, FromDIP(2)));
 	bsz->Add(mInventoryView, wxSizerFlags().Expand().Proportion(1).Border(wxALL, FromDIP(2)));
 
@@ -128,8 +140,7 @@ void ab::ProductInfo::CreateInventoryView()
 	mRetry->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
 		mInventoryBook->SetSelection(INVEN_WAIT);
 		mInventoryActivity->Start();
-		mInventoryWait = std::async(std::launch::async,
-			std::bind_front(&ab::ProductInfo::GetInventory, this), 0, 1000);
+		boost::asio::post(std::bind(&ab::ProductInfo::GetInventory, this, 0, 1000));
 	});
 
 	mInventoryBook->AddPage(mInventoryPanel, "Inventory", false);
@@ -326,15 +337,15 @@ void ab::ProductInfo::GetInventory(size_t begin, size_t limit)
 		auto sess = std::make_shared<grape::session>(app.mNetManager.io(),
 			app.mNetManager.ssl());
 		grape::credentials cred;
-		cred.pharm_id = app.mPharmacyManager.pharmacy.id;
-		cred.branch_id = app.mPharmacyManager.branch.id;
+		cred.pharm_id   = app.mPharmacyManager.pharmacy.id;
+		cred.branch_id  = app.mPharmacyManager.branch.id;
 		cred.account_id = app.mPharmacyManager.account.account_id;
 		cred.session_id = app.mPharmacyManager.account.session_id.value();
 
 		grape::product_identifier pd;
-		pd.product_id = mSelectedProduct.id;
+		pd.product_id  = mSelectedProduct.id;
 		pd.pharmacy_id = cred.pharm_id;
-		pd.branch_id = cred.branch_id;
+		pd.branch_id   = cred.branch_id;
 
 		grape::page page;
 		page.begin = begin;
@@ -347,7 +358,9 @@ void ab::ProductInfo::GetInventory(size_t begin, size_t limit)
 		auto buf2 = grape::serial::write(buf, pd);
 		auto buf3 = grape::serial::write(buf2, page);
 
-		auto fut = sess->req(http::verb::get, "/product/inventory/get"s, std::move(body));
+		grape::body_type body2 = body;
+		//get count
+		auto fut = sess->req(http::verb::get, "/product/inventory/count"s, std::move(body));
 		auto resp = fut.get();
 		if(resp.result() == http::status::not_found)
 		{
@@ -358,38 +371,53 @@ void ab::ProductInfo::GetInventory(size_t begin, size_t limit)
 			throw std::logic_error(app.ParseServerError(resp));
 		auto& b = resp.body();
 		if (b.empty()) throw std::logic_error("no data receievd");
-		auto&& [col, rbuf] = grape::serial::read<grape::collection_type<grape::inventory>> (boost::asio::buffer(b));
+		auto&& [count, rbuf] = grape::serial::read<boost::fusion::vector<std::int64_t>>(boost::asio::buffer(b));
+		mInventoryCount = boost::fusion::at_c<0>(count);
+
+		//load iventory
+		fut = sess->req(http::verb::get, "/product/inventory/get", std::move(body2));
+		resp = fut.get();
+
+		if (resp.result() != http::status::ok) {
+			//product cannot  exists without any formulary
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+		auto& b2 = resp.body();
+		if (b2.empty())
+			throw std::logic_error("expected a body, no body received");
+
+		auto&& [col, rbuf2] = grape::serial::read<grape::collection_type<grape::inventory>> (boost::asio::buffer(b2));
 
 		//also get the product formulary
 		grape::uid_t pid;
 		boost::fusion::at_c<0>(pid) = mSelectedProduct.id;
 
 		constexpr size_t cs = grape::serial::get_size(cred) + grape::serial::get_size(pid);
-		grape::session::request_type::body_type::value_type b2(cs, 0x00);
-		buf  = grape::serial::write(boost::asio::buffer(b2), cred);
+		grape::session::request_type::body_type::value_type body3(cs, 0x00);
+		buf  = grape::serial::write(boost::asio::buffer(body3), cred);
 		buf2 = grape::serial::write(buf, pid);
 
-		fut = sess->req(http::verb::get, "/product/formulary/getproductformularies", std::move(b2));
+		fut = sess->req(http::verb::get, "/product/formulary/getproductformularies", std::move(body3));
 		resp = fut.get();
 
 		if (resp.result() != http::status::ok){
 			//product cannot  exists without any formulary
 			throw std::logic_error(app.ParseServerError(resp));
 		}
-		auto& body2 = resp.body();
-		if (body2.empty())
+		auto& b3 = resp.body();
+		if (b3.empty())
 			throw std::logic_error("expected a body, no body received");
 
-		auto&& [collect, rbuf2] = grape::serial::read<grape::collection_type<grape::formulary>>(boost::asio::buffer(body2));
+		auto&& [collect, rbuf3] = grape::serial::read<grape::collection_type<grape::formulary>>(boost::asio::buffer(b3));
 
 
 		mInventoryActivity->Stop();
-		mInventoryModel->Reload(boost::fusion::at_c<0>(col));
+		mInventoryModel->Reload(boost::fusion::at_c<0>(col), begin, limit, mInventoryCount );
 		mInventoryBook->SetSelection(INVEN_VIEW);
 
 	}
 	catch (const std::exception& exp) {
-		spdlog::error(exp.what());
+		spdlog::error(std::format("{} :{}"s, std::source_location::current(), exp.what()));
 		wxMessageBox(exp.what(), "Product information", wxICON_ERROR | wxOK);
 		mInventoryBook->SetSelection(INVEN_ERROR);
 	}
@@ -407,7 +435,7 @@ void ab::ProductInfo::Load()
 {
 	constexpr auto split = [](const std::string& str) -> wxArrayString {
 		wxArrayString ret;
-		for (auto s : std::ranges::views::split(str, ",")) {
+		for (const auto s : std::ranges::views::split(str, ",")) {
 			ret.push_back(std::string(s.begin(), s.end()));
 		}
 		return ret;
@@ -451,8 +479,8 @@ void ab::ProductInfo::Load()
 	//get the inventory data from grape
 	mInventoryBook->SetSelection(INVEN_WAIT);
 	mInventoryActivity->Start();
-	mInventoryWait = std::async(std::launch::async,
-		std::bind_front(&ab::ProductInfo::GetInventory, this), 0, 1000);
+	boost::asio::post(wxGetApp().mTaskManager.tp(),
+		std::bind(&ab::ProductInfo::GetInventory, this, 0, 1000));
 }
 
 void ab::ProductInfo::UnLoad()
@@ -629,18 +657,18 @@ void ab::ProductInfo::OnAddStock(wxCommandEvent& evt)
 	try {
 		grape::inventory inven; // = { 0 };
 		inven.pharmacy_id = app.mPharmacyManager.pharmacy.id;
-		inven.branch_id = app.mPharmacyManager.branch.id;
-		inven.product_id = mSelectedProduct.id;
-		inven.input_date = std::chrono::system_clock::now();
-		inven.cost = pof::base::currency(boost::lexical_cast<float>(mCostControl->GetValue()));
+		inven.branch_id   = app.mPharmacyManager.branch.id;
+		inven.product_id  = mSelectedProduct.id;
+		inven.input_date  = std::chrono::system_clock::now();
+		inven.cost        = pof::base::currency(boost::lexical_cast<float>(mCostControl->GetValue()));
 		inven.expire_date = std::chrono::system_clock::from_time_t(mExpiryDate->GetValue().GetTicks());
-		inven.lot_number = mBatchNumber->GetValue().ToStdString();
+		inven.lot_number  = mBatchNumber->GetValue().ToStdString();
 		inven.stock_count = static_cast<std::uint64_t>(mQuantityInControl->GetValue());
 
 		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
 		grape::credentials cred; //= { 0 };
-		cred.pharm_id = app.mPharmacyManager.pharmacy.id;
-		cred.branch_id = app.mPharmacyManager.branch.id;
+		cred.pharm_id   = app.mPharmacyManager.pharmacy.id;
+		cred.branch_id  = app.mPharmacyManager.branch.id;
 		cred.account_id = app.mPharmacyManager.account.account_id;
 		cred.session_id = app.mPharmacyManager.account.session_id.value();
 
@@ -662,8 +690,8 @@ void ab::ProductInfo::OnAddStock(wxCommandEvent& evt)
 			//get the inventory data from grape
 		mInventoryBook->SetSelection(INVEN_WAIT);
 		mInventoryActivity->Start();
-		mInventoryWait = std::async(std::launch::async,
-			std::bind_front(&ab::ProductInfo::GetInventory, this), 0, 1000);
+		boost::asio::post(wxGetApp().mTaskManager.tp(),
+			std::bind(&ab::ProductInfo::GetInventory, this, 0, 1000));
 		//overhead cost
 		//std::thread{ std::bind_front(&ab::ProductInfo::GetInventory, this), 0, 1000 }.detach();
 	}

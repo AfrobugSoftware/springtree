@@ -137,7 +137,7 @@ namespace ab {
 		virtual bool GetAttrByRow(unsigned int row, unsigned int col, wxDataViewItemAttr& attr) const override
 		{
 			if (col > col_count || vec_base::empty()) return false;
-			const auto& r = (*this)[row];
+			const auto& r = (*this)[Map(row)];
 			auto& atr = boost::fusion::at_c<1>(r);
 			attr = atr[col];
 			return true;
@@ -149,7 +149,7 @@ namespace ab {
 		}
 
 		virtual unsigned int GetCount() const override {
-			return vec_base::size();
+			return mVirtualCount; //vec_base::size();
 		}
 
 		virtual unsigned int GetRow(const wxDataViewItem& item) const override
@@ -157,21 +157,30 @@ namespace ab {
 			return FromDataViewItem(item);
 		}
 
-		void Reload( const std::vector<T>& items) {
-			Clear();
-			wxDataViewItemArray itemArray;
+		void Reload(const std::vector<T>& items, size_t start, size_t end, std::int64_t max)
+		{
+			//assert(items.size() == (end - start));
+			if (max == -1) return;
+			Reset(max);
+			mVirtualCount = max;
+
+			vec_base::resize(items.size());
 			size_t idx = 0;
-			vec_base::reserve(items.size());
 			for (auto&& i : items) {
 				typename vec_base::value_type v{};
 				boost::fusion::at_c<2>(v) = make_variant(std::move(i));
-				vec_base::emplace_back(std::move(v));
-				ItemAdded(ToDataViewItem(idx), ToDataViewItem(0));
-				idx++;
+				(*this)[idx++] = std::move(v);
 			}
-			//Reset(items.size());
 		}
 
+		void Append(const std::vector<T>& items)
+		{
+			for (auto&& i : items) {
+				typename vec_base::value_type v{};
+				boost::fusion::at_c<2>(v) = make_variant(std::move(i));
+				vec_base::push_back(std::move(v));	
+			}
+		}
 
 		void Clear() {
 			vec_base::clear();
@@ -179,11 +188,11 @@ namespace ab {
 		}
 
 		constexpr std::array<wxVariant, boost::mpl::size<T>::value>& GetRow(size_t row) {
-			return 	boost::fusion::at_c<2>((*this)[row]);
+			return 	boost::fusion::at_c<2>((*this)[Map(row)]);
 		}
 
 		constexpr const std::array<wxVariant, boost::mpl::size<T>::value>& GetRow(size_t row) const {
-			return 	boost::fusion::at_c<2>((*this)[row]);
+			return 	boost::fusion::at_c<2>((*this)[Map(row)]);
 		}
 
 		virtual void GetValueByRow(wxVariant& variant, unsigned int row, unsigned int col) const override
@@ -200,7 +209,7 @@ namespace ab {
 			}
 			
 			if (col > col_count || vec_base::empty()) return;
-			auto& r = boost::fusion::at_c<2>((*this)[row]);
+			auto& r = boost::fusion::at_c<2>((*this)[Map(row)]);
 			variant = r[col];
 		}
 
@@ -217,7 +226,7 @@ namespace ab {
 				}
 
 				if (col > col_count || vec_base::empty()) return false;
-				auto& r = boost::fusion::at_c<2>((*this)[row]); 
+				auto& r = boost::fusion::at_c<2>((*this)[Map(row)]); 
 				r[col] = variant;
 				return true;
 			}
@@ -228,15 +237,17 @@ namespace ab {
 		}
 
 		void AddSpecialCol(sp_value&& value, size_t col) {
-			auto&& [iter, in] = mSpecialColMap.insert({ col, std::forward<sp_value>(value) });
-			if (!in) {
-				iter->second = std::forward<sp_value>(value);
-			}
+			 mSpecialColMap.insert({ col, std::forward<sp_value>(value) });
 		}
 
 	private:
+		constexpr size_t Map(size_t idx) const {
+			return idx % vec_base::size();	
+		}
+
 		constexpr static const size_t col_count = boost::mpl::size<T>::value;
 		std::vector<wxDataViewItemAttr> mExtrattrs;
+		size_t mVirtualCount;
 		boost::unordered_map<size_t, specialcol_t> mSpecialColMap;
 
 

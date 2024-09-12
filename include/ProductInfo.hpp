@@ -143,8 +143,8 @@ namespace ab {
 		wxStaticText* mNameLabel = nullptr;
 		wxAuiToolBarItem* mNameLabelItem = nullptr;
 		//wait futures
-		std::future<void> mInventoryWait; 
 		std::atomic<bool> mInvenoryRunning;
+		std::atomic<size_t> mInventoryCount;
 		std::function<void(void)> mOnBack;
 		DECLARE_EVENT_TABLE();
 	};
