@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include <boost/lexical_cast.hpp>
 #include <functional>
 #include <boost/unordered_map.hpp>
@@ -136,7 +137,9 @@ namespace ab {
 
 		virtual bool GetAttrByRow(unsigned int row, unsigned int col, wxDataViewItemAttr& attr) const override
 		{
+			std::unique_lock<std::mutex> lock(mMutex);
 			if (col > col_count || vec_base::empty()) return false;
+	
 			const auto& r = (*this)[Map(row)];
 			auto& atr = boost::fusion::at_c<1>(r);
 			attr = atr[col];
@@ -161,6 +164,8 @@ namespace ab {
 		{
 			//assert(items.size() == (end - start));
 			if (max == -1) return;
+
+			std::unique_lock<std::mutex> lock(mMutex);
 			Reset(max);
 			mVirtualCount = max;
 
@@ -175,6 +180,7 @@ namespace ab {
 
 		void Append(const std::vector<T>& items)
 		{
+			std::unique_lock<std::mutex> lock(mMutex);
 			for (auto&& i : items) {
 				typename vec_base::value_type v{};
 				boost::fusion::at_c<2>(v) = make_variant(std::move(i));
@@ -208,6 +214,7 @@ namespace ab {
 				return;
 			}
 			
+			std::unique_lock<std::mutex> lk(mMutex);
 			if (col > col_count || vec_base::empty()) return;
 			auto& r = boost::fusion::at_c<2>((*this)[Map(row)]);
 			variant = r[col];
@@ -225,6 +232,7 @@ namespace ab {
 					return false;
 				}
 
+				std::unique_lock<std::mutex> lock(mMutex);
 				if (col > col_count || vec_base::empty()) return false;
 				auto& r = boost::fusion::at_c<2>((*this)[Map(row)]); 
 				r[col] = variant;
@@ -246,8 +254,9 @@ namespace ab {
 		}
 
 		constexpr static const size_t col_count = boost::mpl::size<T>::value;
+		mutable std::mutex mMutex;
 		std::vector<wxDataViewItemAttr> mExtrattrs;
-		size_t mVirtualCount;
+		size_t mVirtualCount = 0;
 		boost::unordered_map<size_t, specialcol_t> mSpecialColMap;
 
 

@@ -84,13 +84,12 @@ namespace ab {
 		void LoadProducts(const grape::collection_type<grape::product>& products);
 	
 
-		std::set<boost::uuids::uuid> mSelections;
 
 		//notification
 		void OnWorkspaceNotification(ab::Workspace::notif notif,
 			wxWindow* win);
 
-		std::set<boost::uuids::uuid> mProductSelect;
+		std::set<std::string> mSelections; //string represnetation of uuid.
 	private:
 		void OnBack(wxCommandEvent& evt);
 		void OnForward(wxCommandEvent& evt);
@@ -108,6 +107,7 @@ namespace ab {
 		void OnSearchTimeOut(wxTimerEvent& evt);
 		void OnSelect(wxCommandEvent& evt);
 		void OnUpdateBook(wxUpdateUIEvent& evt);
+		void OnHeaderClick(wxDataViewEvent& evt);
 		
 
 		//grape functions 

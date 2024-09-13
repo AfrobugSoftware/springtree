@@ -2,22 +2,33 @@
 #include "Application.hpp"
 
 BEGIN_EVENT_TABLE(ab::ProductView, wxPanel)
+	//tools
 	EVT_TOOL(wxID_BACKWARD, ab::ProductView::OnBack)
 	EVT_TOOL(wxID_FORWARD, ab::ProductView::OnForward)
-	EVT_UPDATE_UI(wxID_FORWARD, ab::ProductView::OnUpdateArrows)
-	EVT_UPDATE_UI(wxID_BACKWARD, ab::ProductView::OnUpdateArrows)
+	EVT_TOOL(ab::ProductView::ID_SELECT, ab::ProductView::OnSelect)
 	EVT_TOOL(ab::ProductView::ID_ADD_PRODUCT, ab::ProductView::OnAddProduct)
 	EVT_AUITOOLBAR_TOOL_DROPDOWN(ab::ProductView::ID_FORMULARY, ab::ProductView::OnFormularyToolbar)
+	
+	//updates
+	EVT_UPDATE_UI(wxID_FORWARD, ab::ProductView::OnUpdateArrows)
+	EVT_UPDATE_UI(wxID_BACKWARD, ab::ProductView::OnUpdateArrows)
+	EVT_UPDATE_UI(ab::ProductView::ID_BOOK, ab::ProductView::OnUpdateBook)
+	
+	//menu
 	EVT_MENU(ab::ProductView::ID_IMPORT_FORMULARY, ab::ProductView::OnImportFormulary)
 	EVT_MENU(ab::ProductView::ID_EXPORT_FORMULARY, ab::ProductView::OnExportFormulary)
-	EVT_UPDATE_UI(ab::ProductView::ID_BOOK, ab::ProductView::OnUpdateBook)
+	
 	//Search
 	EVT_SEARCH(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearch)
 	EVT_SEARCH_CANCEL(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearchCleared)
 	EVT_TEXT(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearch)
+
+	//data view
 	EVT_DATAVIEW_ITEM_CONTEXT_MENU(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnContextMenu)
+	EVT_DATAVIEW_COLUMN_HEADER_CLICK(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnHeaderClick)
 	EVT_DATAVIEW_ITEM_ACTIVATED(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnItemActivated)
 	EVT_DATAVIEW_CACHE_HINT(ab::ProductView::ID_DATA_VIEW, ab::ProductView::OnCacheHint)
+	
 	EVT_TIMER(ab::ProductView::ID_SEARH_TIMER, ab::ProductView::OnSearchTimeOut)
 END_EVENT_TABLE()
 
@@ -79,6 +90,29 @@ void ab::ProductView::CreateView()
 		auto& arr = mModel->GetRow(row);
 		v = std::format("{} {}", arr[7].GetString().ToStdString(), arr[8].GetString().ToStdString());
 	};
+
+	ab::DataModel<ab::pproduct>::specialcol_t SelectionCol;
+	SelectionCol.first = [&](wxVariant& variant, size_t row, size_t col) {
+		auto& rv = mModel->GetRow(row);
+		auto found = mSelections.find(rv[0].GetString().ToStdString());
+		variant = wxVariant((found != mSelections.end()));
+	};
+
+	SelectionCol.second = [&](const wxVariant& data, size_t row, size_t col) -> bool {
+		auto& rv = mModel->GetRow(row);
+		auto uuid = rv[0].GetString().ToStdString();
+		if (data.GetBool()) {
+
+			auto [iter, inserted] = mSelections.insert(uuid);
+			return inserted;
+		}
+		else {
+			mSelections.erase(uuid);
+			return true;
+		}
+	};
+
+	mModel->AddSpecialCol(std::move(SelectionCol), 1500);
 	mModel->AddSpecialCol(std::move(col), col_strength);
 
 	panel->SetSizer(sizer);
@@ -138,7 +172,7 @@ void ab::ProductView::CreateBottomTool()
 	mBottomTool = new wxAuiToolBar(this, ID_BOTTOM_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mBottomTool->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
 
-	auto select   = mBottomTool->AddTool(ID_SELECT, "Select", wxArtProvider::GetBitmap("select_check", wxART_OTHER, wxSize(16, 16)));
+	auto select   = mBottomTool->AddTool(ID_SELECT, "Select", wxArtProvider::GetBitmap("select_check", wxART_OTHER, wxSize(16, 16)), "Select an Item", wxITEM_CHECK);
 	mBottomTool->AddSpacer(FromDIP(10));
 	mFormularyTool = mBottomTool->AddTool(ID_FORMULARY, "Formulary", wxArtProvider::GetBitmap("edit_note", wxART_OTHER, wxSize(16, 16)), "Formulary");
 	mFormularyTool->SetHasDropDown(true);
@@ -404,11 +438,27 @@ void ab::ProductView::OnSearchTimeOut(wxTimerEvent& evt)
 
 void ab::ProductView::OnSelect(wxCommandEvent& evt)
 {
+	if (mModel->empty()) return;
+	if (evt.IsChecked())
+	{
+		mSelectCol = mView->PrependToggleColumn(wxT("Select"), 1500, wxDATAVIEW_CELL_ACTIVATABLE, FromDIP(50));
+	}
+	else 
+	{
+		mView->DeleteColumn(mSelectCol);
+		mSelections.clear();
+		mSelectCol = nullptr;
+	}
+
 }
 
 void ab::ProductView::OnUpdateBook(wxUpdateUIEvent& evt)
 {
 
+}
+
+void ab::ProductView::OnHeaderClick(wxDataViewEvent& evt)
+{
 }
 
 
