@@ -255,8 +255,8 @@ namespace ab {
 
 		constexpr static const size_t col_count = boost::mpl::size<T>::value;
 		mutable std::mutex mMutex;
-		std::vector<wxDataViewItemAttr> mExtrattrs;
 		size_t mVirtualCount = 0;
+		std::vector<wxDataViewItemAttr> mExtrattrs;
 		boost::unordered_map<size_t, specialcol_t> mSpecialColMap;
 
 

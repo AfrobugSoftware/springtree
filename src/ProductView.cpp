@@ -470,6 +470,9 @@ void ab::ProductView::OnSearch(wxCommandEvent& evt)
 		return Load();	
 	}
 
+	if (std::ranges::all_of(sText, [](char s) {return std::isspace(s); }))
+		return;
+
 	if (!mSearchTimer.IsRunning()) {
 		mSearchTimer.StartOnce(30); //wait 30ms to collect text
 	}
