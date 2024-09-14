@@ -7,6 +7,7 @@ BEGIN_EVENT_TABLE(ab::ProductInfo, wxPanel)
 	EVT_TOOL(ab::ProductInfo::ID_SHOW_PRODUCT_SALE_HISTORY, ab::ProductInfo::OnHistory)
 	EVT_TOOL(ab::ProductInfo::ID_TOOL_SHOW_PRODUCT_INFO, ab::ProductInfo::OnProductProperty)
 	EVT_TOOL(ab::ProductInfo::ID_TOOL_GO_BACK, ab::ProductInfo::OnBack)
+	EVT_TOOL(wxID_SAVE, ab::ProductInfo::OnSave)
 	EVT_PG_CHANGING(ab::ProductInfo::ID_PROPERTY_GRID, ab::ProductInfo::OnPropertyChanging)
 	EVT_PG_CHANGED(ab::ProductInfo::ID_PROPERTY_GRID, ab::ProductInfo::OnPropertyChanged)
 	EVT_DATE_CHANGED(ab::ProductInfo::ID_INVEN_START_DATE_PICKER, ab::ProductInfo::OnDateChange)
@@ -51,7 +52,7 @@ void ab::ProductInfo::CreateMainTool()
 {
 	mMainToolbar = new wxAuiToolBar(this, ID_MAINTOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mMainToolbar->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
-	mMainToolbar->AddTool(ID_TOOL_GO_BACK, "Back", wxArtProvider::GetBitmap("back", wxART_OTHER, wxSize(16, 16)));
+	mMainToolbar->AddTool(ID_TOOL_GO_BACK, "Back", wxArtProvider::GetBitmap("back", wxART_OTHER, FromDIP(wxSize(16, 16))));
 	mMainToolbar->AddSeparator();
 	mMainToolbar->AddSpacer(FromDIP(5));
 	mNameLabel = new wxStaticText(mMainToolbar, wxID_ANY, "TEST", wxDefaultPosition, wxDefaultSize, 0);
@@ -61,13 +62,15 @@ void ab::ProductInfo::CreateMainTool()
 
 
 	mMainToolbar->AddStretchSpacer();
-	mMainToolbar->AddTool(ID_TOOL_ADD_INVENTORY, "Add stock", wxArtProvider::GetBitmap("add", wxART_OTHER, wxSize(16, 16)), "Add stock to the product");
-	mMainToolbar->AddSpacer(FromDIP(10));
-	mMainToolbar->AddTool(ID_TOOL_SHOW_PRODUCT_INFO, "Product info", wxArtProvider::GetBitmap("settings", wxART_OTHER, wxSize(16, 16)), "Show product information");
-	mMainToolbar->AddSpacer(FromDIP(10));
-	mMainToolbar->AddTool(ID_ADD_BARCODE, "Add barcode", wxArtProvider::GetBitmap("add", wxART_OTHER, wxSize(16, 16)), "Add barcode to product");
-	mMainToolbar->AddSpacer(FromDIP(10));
-	mMainToolbar->AddTool(ID_SHOW_PRODUCT_SALE_HISTORY, "Product sale history", wxArtProvider::GetBitmap("", wxART_OTHER, wxSize(16, 16)), "Show the product sale history");
+	mMainToolbar->AddTool(ID_TOOL_ADD_INVENTORY, "Add stock", wxArtProvider::GetBitmap("add", wxART_OTHER, FromDIP(wxSize(16, 16))), "Add stock to the product");
+	mMainToolbar->AddSpacer(FromDIP(5));
+	mMainToolbar->AddTool(ID_TOOL_SHOW_PRODUCT_INFO, "Product info", wxArtProvider::GetBitmap("settings", wxART_OTHER, FromDIP(wxSize(16, 16))), "Show product information");
+	mMainToolbar->AddSpacer(FromDIP(5));
+	mMainToolbar->AddTool(ID_ADD_BARCODE, "Add barcode", wxArtProvider::GetBitmap("barcode", wxART_OTHER, FromDIP(wxSize(16, 16))), "Add barcode to product");
+	mMainToolbar->AddSpacer(FromDIP(5));
+	mMainToolbar->AddTool(ID_SHOW_PRODUCT_SALE_HISTORY, "Product sale history", wxArtProvider::GetBitmap("history", wxART_OTHER, FromDIP(wxSize(16, 16))), "Show the product sale history");
+	mMainToolbar->AddSpacer(FromDIP(5));
+	mMainToolbar->AddTool(wxID_SAVE, "Save", wxArtProvider::GetBitmap("save", wxART_OTHER, FromDIP(wxSize(16,16))), "Save product edits");
 	mMainToolbar->Realize();
 	mManager.AddPane(mMainToolbar, wxAuiPaneInfo().Name("BottomToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(2).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
 }
@@ -106,8 +109,8 @@ void ab::ProductInfo::CreateInventoryView()
 	mInventoryView->AssociateModel(mInventoryModel.get());
 	mInventoryModel->DecRef();
 
-	//mInventoryView->AppendDateColumn(wxT("Input Date"), 5, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	//mInventoryView->AppendDateColumn(wxT("Expiry Date"), 4, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mInventoryView->AppendDateColumn(wxT("Input Date"), 5, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mInventoryView->AppendDateColumn(wxT("Expiry Date"), 4, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
 	mInventoryView->AppendTextColumn(wxT("Stock count"), 6, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
 	mInventoryView->AppendTextColumn(wxT("Cost Price"), 7, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
 
@@ -126,9 +129,9 @@ void ab::ProductInfo::CreateInventoryView()
 
 	std::tie(mInventoryWaitPanel, mInventoryActivity) = app.CreateWaitPanel(mInventoryBook, "Please wait...");
 	wxButton* mAddStock = nullptr;
-	std::tie(mInventoryEmptyPanel, std::ignore, mAddStock) = app.CreateEmptyPanel(mInventoryBook, "No inventory for product", "supplement-bottle");
+	std::tie(mInventoryEmptyPanel, std::ignore, mAddStock) = app.CreateEmptyPanel(mInventoryBook, "No inventory for product", "product");
 	mAddStock->SetLabel("Add stock");
-	mAddStock->SetBitmap(wxArtProvider::GetBitmap(wxART_PLUS, wxART_BUTTON));
+	mAddStock->SetBitmap(wxArtProvider::GetBitmap("add_task", wxART_OTHER, FromDIP(wxSize(16,16))));
 	mAddStock->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
 		OnAddStock(evt);
 	});
@@ -136,15 +139,15 @@ void ab::ProductInfo::CreateInventoryView()
 	wxButton* mRetry = nullptr;
 	std::tie(mInventoryErrorPanel, std::ignore, mRetry) = app.CreateEmptyPanel(mInventoryBook, "Server error", wxART_ERROR, wxSize(48,48), wxART_MESSAGE_BOX);
 	mRetry->SetLabel("Retry");
-	mRetry->SetBitmap(wxArtProvider::GetBitmap(wxART_REFRESH, wxART_BUTTON));
+	mRetry->SetBitmap(wxArtProvider::GetBitmap("refresh", wxART_OTHER, FromDIP(wxSize(16,16))));
 	mRetry->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
 		mInventoryBook->SetSelection(INVEN_WAIT);
 		mInventoryActivity->Start();
 		boost::asio::post(std::bind(&ab::ProductInfo::GetInventory, this, 0, 1000));
 	});
 
-	mInventoryBook->AddPage(mInventoryPanel, "Inventory", false);
-	mInventoryBook->AddPage(mInventoryWaitPanel, "Inven wait", false);
+	mInventoryBook->AddPage(mInventoryPanel,      "Inventory", false);
+	mInventoryBook->AddPage(mInventoryWaitPanel,  "Inven wait", false);
 	mInventoryBook->AddPage(mInventoryEmptyPanel, "Inven empty", false);
 	mInventoryBook->AddPage(mInventoryErrorPanel, "Inven error", false);
 
@@ -178,7 +181,7 @@ void ab::ProductInfo::CreateHistoryView()
 
 void ab::ProductInfo::CreateProperyGrid()
 {
-	wxPanel* panel = new wxPanel(this, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(548, -1)));
+	wxPanel* panel = new wxPanel(this, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(548, -1)), wxNO_BORDER |wxTAB_TRAVERSAL);
 	wxBoxSizer* bs = new wxBoxSizer(wxVERTICAL);
 
 	mProductInfoGridManager = new wxPropertyGridManager(panel, wxID_ANY,
@@ -201,6 +204,7 @@ void ab::ProductInfo::CreateProperyGrid()
 	auto tool = mProductInfoGridManager->GetToolBar();
 	if (tool) {
 		tool->SetBackgroundColour(*wxWHITE);
+		tool->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
 		tool->SetSize(FromDIP(wxSize(-1, 30)));
 		tool->Realize();
 
@@ -231,13 +235,14 @@ void ab::ProductInfo::CreateProperyGrid()
 	p[11]->SetValidator(val);
 	p[12]->SetValidator(val);
 	p[13] = mProductInfoPage->Append(new wxIntProperty("Current stock", "13"));
+	p[13]->Enable(false);
 
 	bs->Add(mProductInfoGridManager, wxSizerFlags().Expand().Proportion(1));
 	panel->SetSizer(bs);
 	panel->Layout();
 
 	mManager.AddPane(panel, wxAuiPaneInfo().Name("ProductProperty")
-		.Caption("Product property").CaptionVisible().Right().BestSize(FromDIP(wxSize(548, -1)))
+		.Caption("Product property").CaptionVisible(false).Right().Row(1).MinSize(FromDIP(wxSize(348, -1)))
 		.PaneBorder().BottomDockable(false).Floatable(false).TopDockable(false).Show());
 }
 
@@ -309,6 +314,22 @@ void ab::ProductInfo::CreateChoices()
 
 void ab::ProductInfo::OnAddBarcode(wxCommandEvent& evt)
 {
+	while (1) {
+		auto barcode = wxGetTextFromUser("Please scan the item", "Barcode");
+		if (barcode.empty()) return;
+
+		//EAN-13 barcode format
+		std::regex rex("^\\d{10,13}$"s);
+		if (!std::regex_match(barcode.ToStdString(), rex)) {
+			wxMessageBox("Invalid barcode", "Product information", wxICON_WARNING |wxOK);
+		}
+		else {
+			mSelectedProduct.barcode = std::move(barcode.ToStdString());
+			p[4]->SetValue(wxVariant(barcode));
+			mUpdateSet.set(13);
+			break;
+		}
+	}
 }
 
 void ab::ProductInfo::OnCacheHint(wxDataViewEvent& evt)
@@ -317,7 +338,72 @@ void ab::ProductInfo::OnCacheHint(wxDataViewEvent& evt)
 
 void ab::ProductInfo::OnSave(wxCommandEvent& evt)
 {
-	//
+	auto& app = wxGetApp();
+	wxBusyInfo wait("Saving product details\nPlease wait...");
+	if (!mUpdateSet.any() || !mUpdatePharmaSet.any()) return;
+
+	try {
+		grape::credentials cred{
+		app.mPharmacyManager.account.account_id,
+		app.mPharmacyManager.account.session_id.value(),
+		app.mPharmacyManager.pharmacy.id,
+		app.mPharmacyManager.branch.id };
+		
+		//dumb the data
+		grape::product product;
+		product.id           = mSelectedProduct.id;
+		product.name         = mSelectedProduct.name;
+		product.generic_name = mSelectedProduct.generic_name;
+		product.class_       = mSelectedProduct.cls;
+		product.formulation  = mSelectedProduct.formulation;
+		product.strength     = mSelectedProduct.strength;
+		product.usage_info   = mSelectedProduct.usage_info;
+		product.indications  = mSelectedProduct.indications;
+		product.package_size = mSelectedProduct.package_size;
+		product.sideeffects  = mSelectedProduct.sideeffects;
+		product.barcode      = mSelectedProduct.barcode;
+		grape::bits<grape::product> bitset{ mUpdateSet };
+		grape::uid_t fid{ mSelectedProduct.formulary_id };
+		const size_t size = grape::serial::get_size(cred) +
+			 grape::serial::get_size(product) + grape::serial::get_size(bitset) +  grape::serial::get_size(fid);
+		grape::body_type body(size, 0x00);
+		auto wbuf  = grape::serial::write(boost::asio::buffer(body), cred);
+		auto wbuf2 = grape::serial::write(wbuf,  bitset);
+		auto wbuf3 = grape::serial::write(wbuf2, fid);
+		auto wbuf4 = grape::serial::write(wbuf3, product);
+
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+		auto fut = sess->req(http::verb::post, "/product/formulary/updateproduct", std::move(body));
+		auto resp = fut.get();
+		
+		if (resp.result() != http::status::ok)
+			throw std::logic_error(app.ParseServerError(resp));
+
+		grape::pharma_product_opt pharma_opt;
+		pharma_opt.branch_id   = cred.branch_id;
+		pharma_opt.pharmacy_id = cred.pharm_id;
+		pharma_opt.product_id  = mSelectedProduct.id;
+		if (mUpdatePharmaSet.test(3))pharma_opt.unitprice   = mSelectedProduct.unit_price;
+		if (mUpdatePharmaSet.test(4))pharma_opt.costprice   = mSelectedProduct.cost_price;
+		const size_t size2 = grape::serial::get_size(cred) + grape::serial::get_size(pharma_opt);
+		grape::body_type body2(size2, 0x00);
+		auto wbuf5 = grape::serial::write(boost::asio::buffer(body2), cred);
+		auto wbuf6 = grape::serial::write(wbuf5, pharma_opt);
+
+		fut = sess->req(http::verb::post, "/product/updatepharma", std::move(body2));
+		resp = fut.get();
+
+		if (resp.result() != http::status::ok)
+			throw std::logic_error(app.ParseServerError(resp));
+
+		wxMessageBox("Product updated!!", "Product information", wxICON_INFORMATION | wxOK);
+		mUpdateSet.reset();
+		mUpdatePharmaSet.reset();
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(std::format("{}: {}", std::source_location::current(), exp.what()));
+		wxMessageBox(std::format("Failed to save\n{}", exp.what()), "Product Information", wxICON_ERROR | wxOK);
+	}
 }
 
 void ab::ProductInfo::OnDateChange(wxDateEvent& evt)
@@ -417,7 +503,7 @@ void ab::ProductInfo::GetInventory(size_t begin, size_t limit)
 
 	}
 	catch (const std::exception& exp) {
-		spdlog::error(std::format("{} :{}"s, std::source_location::current(), exp.what()));
+		spdlog::error(std::format("{} :{}", std::source_location::current(), exp.what()));
 		wxMessageBox(exp.what(), "Product information", wxICON_ERROR | wxOK);
 		mInventoryBook->SetSelection(INVEN_ERROR);
 	}
@@ -491,11 +577,11 @@ void ab::ProductInfo::UnLoad()
 
 void ab::ProductInfo::OnPropertyChanging(wxPropertyGridEvent& evt)
 {
-	if (mProductFormulary.id.is_nil())
+	/*if (mProductFormulary.id.is_nil())
 	{
 		evt.Veto();
 		return;
-	}
+	}*/
 }
 
 void ab::ProductInfo::OnPropertyChanged(wxPropertyGridEvent& evt)
@@ -507,32 +593,66 @@ void ab::ProductInfo::OnPropertyChanged(wxPropertyGridEvent& evt)
 	switch (n)
 	{
 	case 0: //name
+	{
+		auto v = p->GetValue().GetString().ToStdString();
+		mUpdateSet.set(2);
+		boost::trim(v);
+		boost::to_lower(v);
+		mSelectedProduct.name = std::move(v);
+	}
 		break;
 	case 1: //generic name
+	{
+		auto v = p->GetValue().GetString().ToStdString();
+		mUpdateSet.set(3);
+		boost::trim(v);
+		boost::to_lower(v);
+		mSelectedProduct.name = std::move(v);
+	}
 		break;
 	case 2: // package size
+		mUpdateSet.set(11);
+		mSelectedProduct.package_size = p->GetValue().GetInteger();
 		break;
 	case 3: //class
+		mUpdateSet.set(4);
+		mSelectedProduct.cls = ProductClassChoices[p->GetValue().GetInteger()].GetText();
 		break;
 	case 4: // barcode
+		mUpdateSet.set(13);
+		mSelectedProduct.barcode = p->GetValue().GetString();
 		break;
 	case 5: // formulation
+		mUpdateSet.set(5);
+		mSelectedProduct.formulation = FormulationChoices[p->GetValue().GetInteger()].GetText();
 		break;
 	case 6: //usage info
+		mUpdateSet.set(8);
+		mSelectedProduct.usage_info = p->GetValue().GetString();
 		break;
-	case 7:
+	case 7: //indications
+		mUpdateSet.set(10);
+		mSelectedProduct.indications = p->GetValue().GetString();
 		break;
-	case 8:
+	case 8: //sideeffects
+		mUpdateSet.set(12);
+		mSelectedProduct.sideeffects = p->GetValue().GetString();
 		break;
-	case 9:
+	case 9: //stength
+		mUpdateSet.set(6);
+		mSelectedProduct.strength = p->GetValue().GetString();
 		break;
-	case 10:
+	case 10: //stength type
+		mUpdateSet.set(7);
+		mSelectedProduct.strength_type = StrengthChoices[p->GetValue().GetInteger()].GetText();
 		break;
-	case 11:
+	case 11: //unit price
+		mUpdatePharmaSet.set(3);
+		mSelectedProduct.unit_price = pof::base::currency(p->GetValue().GetDouble());
 		break;
-	case 12:
-		break;
-	case 13:
+	case 12: //cost
+		mUpdatePharmaSet.set(4);
+		mSelectedProduct.cost_price = pof::base::currency(p->GetValue().GetDouble());
 		break;
 	default:
 		break;
@@ -541,6 +661,13 @@ void ab::ProductInfo::OnPropertyChanged(wxPropertyGridEvent& evt)
 
 void ab::ProductInfo::OnBack(wxCommandEvent& evt)
 {
+	if (mUpdatePharmaSet.any() || mUpdateSet.any()){
+		int ans = wxMessageBox("Exiting product information page without saving edits would cause edits to be lost.\nDo you want to save your changes?", "Product information", wxICON_INFORMATION | wxYES_NO);
+		if (ans == wxYES)
+			OnSave(evt);
+	}
+	mUpdateSet.reset();
+	mUpdatePharmaSet.reset();
 	mOnBack();
 }
 
@@ -655,7 +782,7 @@ void ab::ProductInfo::OnAddStock(wxCommandEvent& evt)
 	if (d->ShowModal() != wxID_OK)
 		return;
 	try {
-		grape::inventory inven; // = { 0 };
+		grape::inventory inven;
 		inven.pharmacy_id = app.mPharmacyManager.pharmacy.id;
 		inven.branch_id   = app.mPharmacyManager.branch.id;
 		inven.product_id  = mSelectedProduct.id;
@@ -666,11 +793,11 @@ void ab::ProductInfo::OnAddStock(wxCommandEvent& evt)
 		inven.stock_count = static_cast<std::uint64_t>(mQuantityInControl->GetValue());
 
 		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
-		grape::credentials cred; //= { 0 };
-		cred.pharm_id   = app.mPharmacyManager.pharmacy.id;
-		cred.branch_id  = app.mPharmacyManager.branch.id;
-		cred.account_id = app.mPharmacyManager.account.account_id;
-		cred.session_id = app.mPharmacyManager.account.session_id.value();
+		grape::credentials cred{
+		app.mPharmacyManager.account.account_id,
+		app.mPharmacyManager.account.session_id.value(),
+		app.mPharmacyManager.pharmacy.id,
+		app.mPharmacyManager.branch.id};
 
 		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(inven);
 		grape::body_type body(size, 0x00);
@@ -680,20 +807,44 @@ void ab::ProductInfo::OnAddStock(wxCommandEvent& evt)
 		auto fut = sess->req(http::verb::post, "/product/inventory/add", std::move(body));
 		grape::session::response_type resp;
 		{
-			wxBusyInfo wait("Adding stock to product...");
+			wxBusyInfo wait("Adding inventory to product\nPlease wait...");
 			resp = fut.get();
 		}
 		if (resp.result() != http::status::ok)
 			throw std::logic_error(app.ParseServerError(resp));
 
+
+		//update the product stock
+		grape::pharma_product_opt pharma_opt;
+		pharma_opt.branch_id = cred.branch_id;
+		pharma_opt.pharmacy_id = cred.pharm_id;
+		pharma_opt.product_id = mSelectedProduct.id;
+		pharma_opt.stock_count = inven.stock_count;
+		const size_t size2 = grape::serial::get_size(cred) + grape::serial::get_size(pharma_opt);
+		grape::body_type body2(size2, 0x00);
+		auto wbuf5 = grape::serial::write(boost::asio::buffer(body2), cred);
+		auto wbuf6 = grape::serial::write(wbuf5, pharma_opt);
+
+		fut = sess->req(http::verb::post, "/product/updatepharma", std::move(body2));
+		{
+			wxBusyInfo wait("updating product stock\nPlease wait...");
+			resp = fut.get();
+		}
+
+		if (resp.result() != http::status::ok)
+			throw std::logic_error(app.ParseServerError(resp));
+
+		//update the product info grid
+		p[11]->SetValue(wxVariant(boost::lexical_cast<double>(mUnitControl->GetValue().ToStdString())));
+		p[12]->SetValue(wxVariant(boost::lexical_cast<double>(mCostControl->GetValue().ToStdString())));
+		p[13]->SetValue(wxVariant(wxLongLong(mSelectedProduct.stock_count + inven.stock_count)));
+
 		//everything is good refresh the inventory view
 			//get the inventory data from grape
 		mInventoryBook->SetSelection(INVEN_WAIT);
 		mInventoryActivity->Start();
-		boost::asio::post(wxGetApp().mTaskManager.tp(),
+		boost::asio::post(wxGetApp().mTaskManager.tp(),	
 			std::bind(&ab::ProductInfo::GetInventory, this, 0, 1000));
-		//overhead cost
-		//std::thread{ std::bind_front(&ab::ProductInfo::GetInventory, this), 0, 1000 }.detach();
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());

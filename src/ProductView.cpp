@@ -149,9 +149,9 @@ void ab::ProductView::CreateToolBar()
 	mTopTool = new wxAuiToolBar(this, ID_TOP_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mTopTool->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
 
-	mBack = mTopTool->AddTool(wxID_BACKWARD,wxEmptyString, wxArtProvider::GetBitmap("back", wxART_OTHER, wxSize(16,16)), "Back");
+	mBack = mTopTool->AddTool(wxID_BACKWARD,wxEmptyString, wxArtProvider::GetBitmap("back", wxART_OTHER, FromDIP(wxSize(16,16))), "Back");
 	mTopTool->AddSpacer(FromDIP(5));
-	mForward = mTopTool->AddTool(wxID_FORWARD,wxEmptyString, wxArtProvider::GetBitmap("forward", wxART_OTHER, wxSize(16,16)), "forward");
+	mForward = mTopTool->AddTool(wxID_FORWARD,wxEmptyString, wxArtProvider::GetBitmap("forward", wxART_OTHER, FromDIP(wxSize(16,16))), "forward");
 
 	mSearchBar = new wxSearchCtrl(mTopTool, ID_SEARCH, wxEmptyString, wxDefaultPosition, wxSize(FromDIP(450), FromDIP(-1)), wxWANTS_CHARS);
 #ifndef __WXMAC__
@@ -172,9 +172,9 @@ void ab::ProductView::CreateBottomTool()
 	mBottomTool = new wxAuiToolBar(this, ID_BOTTOM_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mBottomTool->SetToolBitmapSize(wxSize(FromDIP(16), FromDIP(16)));
 
-	auto select   = mBottomTool->AddTool(ID_SELECT, "Select", wxArtProvider::GetBitmap("select_check", wxART_OTHER, wxSize(16, 16)), "Select an Item", wxITEM_CHECK);
+	auto select   = mBottomTool->AddTool(ID_SELECT, "Select", wxArtProvider::GetBitmap("select_check", wxART_OTHER, FromDIP(wxSize(16, 16))), "Select an Item", wxITEM_CHECK);
 	mBottomTool->AddSpacer(FromDIP(10));
-	mFormularyTool = mBottomTool->AddTool(ID_FORMULARY, "Formulary", wxArtProvider::GetBitmap("edit_note", wxART_OTHER, wxSize(16, 16)), "Formulary");
+	mFormularyTool = mBottomTool->AddTool(ID_FORMULARY, "Formulary", wxArtProvider::GetBitmap("edit_note", wxART_OTHER, FromDIP(wxSize(16, 16))), "Formulary");
 	mFormularyTool->SetHasDropDown(true);
 
 	mBottomTool->Realize();
@@ -768,6 +768,42 @@ void ab::ProductView::GetProductCount()
 	catch (const std::exception& exp) {
 		spdlog::error(std::format("{}: {}", std::source_location::current(), exp.what()));
 		std::rethrow_exception(std::current_exception());
+	}
+}
+
+void ab::ProductView::GetFormularies()
+{
+	auto& app = wxGetApp();
+	try {
+		grape::credentials cred{
+		app.mPharmacyManager.account.account_id,
+		app.mPharmacyManager.account.session_id.value(),
+		app.mPharmacyManager.pharmacy.id,
+		app.mPharmacyManager.branch.id };
+
+		constexpr const size_t size = grape::serial::get_size(cred);
+		grape::session::request_type::body_type::value_type body(size, 0x00);
+		auto buf = grape::serial::write(boost::asio::buffer(body), cred);
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+		auto fut = sess->req(http::verb::get, "/product/formulary/get", std::move(body));
+		auto resp = fut.get();
+
+		if (resp.result() == http::status::not_found) mProductCount = 0ll;
+		else if (resp.result() != http::status::ok)
+			throw std::logic_error(app.ParseServerError(resp));
+
+		auto& rbody = resp.body();
+		if (rbody.empty())
+			throw std::logic_error("No count received");
+
+		auto&& [collection, rdbuf] = 
+			grape::serial::read<grape::collection_type<grape::formulary>>(boost::asio::buffer(rbody));
+		mFormularies = std::move(boost::fusion::at_c<0>(collection));
+
+	}
+	catch (const std::exception& exp) 
+	{
+		spdlog::error(std::format("{}: {}", std::source_location::current(), exp.what()));
 	}
 }
 

@@ -443,4 +443,8 @@ namespace grape {
 		http::vector_body<std::uint8_t>
 	>;
 	using body_type = session::request_type::body_type::value_type;
+
+	template<typename T>
+	using bits =
+		boost::fusion::vector<std::bitset<boost::mpl::size<T>::value>>;
 };

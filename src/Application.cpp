@@ -306,7 +306,7 @@ std::tuple<wxPanel*, wxStaticText*, wxButton*> ab::Application::CreateEmptyPanel
 	bSizer9->Add(mEmptyStr, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_CENTER_HORIZONTAL | wxALL, 5);
 
 	wxButton* btn = new wxButton(m7, wxID_ANY);
-	btn->SetBitmap(wxArtProvider::GetBitmap("add_task", wxART_OTHER, wxSize(16,16)));
+	btn->SetBitmap(wxArtProvider::GetBitmap("add_task", wxART_OTHER, mEmpty->FromDIP(wxSize(16,16))));
 	btn->SetLabel("button");
 	btn->SetBackgroundColour(*wxWHITE);
 	bSizer9->Add(btn, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_CENTER_HORIZONTAL | wxALL, 5);

@@ -22,11 +22,12 @@ namespace ab {
 			if constexpr (std::is_same_v<std::chrono::year_month_day, arg_type>)
 			{
 				std::chrono::sys_days days{ v };
-				ret[i] = wxVariant(wxDateTime(days.time_since_epoch().count()));
+				ret[i] = wxVariant(wxDateTime(std::chrono::system_clock::to_time_t(days)));
 			}
 			else if constexpr (std::is_same_v<std::chrono::system_clock::time_point, arg_type>)
 			{
-				ret[i] = wxVariant(wxDateTime(v.time_since_epoch().count()));
+				auto tt = std::chrono::system_clock::to_time_t(v);
+				ret[i] = wxVariant(wxDateTime(tt));
 			}
 			else if constexpr (std::is_enum_v<arg_type>)
 			{

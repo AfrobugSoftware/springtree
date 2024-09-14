@@ -115,6 +115,7 @@ namespace ab {
 		void AppendProducts(size_t from, size_t to);
 		void SearchProducts(std::string&& sstring);
 		void GetProductCount();
+		void GetFormularies();
 
 		void SetupAuiTheme();
 		void OnAuiThemeChange();
@@ -151,6 +152,7 @@ namespace ab {
 
 		std::unique_ptr<ab::DataModel<ab::pproduct>> mModel;
 		std::unique_ptr<ab::DataModel<grape::inventory>> mInventoryModel;
+		std::vector<grape::formulary> mFormularies;
 		
 		using page_range = std::pair<size_t, size_t>;
 		std::atomic<bool> mStillSearching = false;

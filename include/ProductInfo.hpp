@@ -100,6 +100,9 @@ namespace ab {
 
 		double mStubPrice;
 		ab::pproduct mSelectedProduct;
+		std::bitset<boost::mpl::size<grape::product>::value> mUpdateSet;
+		std::bitset<boost::mpl::size<grape::pharma_product>::value> mUpdatePharmaSet;
+
 		grape::formulary mProductFormulary;
 
 		wxSimplebook* mInventoryBook;

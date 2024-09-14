@@ -522,9 +522,9 @@ void ab::AddProductDialog::OnScanProduct(wxCommandEvent& evt)
 		if (bar.empty()) return;
 
 		//EAN-13 barcode format
-		std::regex rex("^\\d{13}$"s);
+		std::regex rex("^\\d{10-13}$"s);
 		if (!std::regex_match(bar.ToStdString(), rex)) {
-			wxMessageBox("Invalid barcode");
+			wxMessageBox("Invalid barcode", "Add product", wxICON_WARNING | wxOK);
 		}
 		else {
 			mScanProductString = std::move(bar.ToStdString());

@@ -314,8 +314,6 @@ namespace grape
 				buf_ += sizeof(opt_fields::value_type);
 			}
 			template<typename T, size_t N>
-				requires Integers<T> || FusionStruct<T> || Enums<T> || Pods<T>
-			|| std::is_same_v<T, std::string> || std::is_array_v<T> || std::is_same_v<T, std::chrono::system_clock::time_point>
 			void operator()(const optional_field<T, N>& field) const {
 				if (optv_ == nullptr) throw std::logic_error("optional field comes before optional set");
 				if (field.has_value()) {
@@ -425,9 +423,7 @@ namespace grape
 			}
 
 			template<typename T, size_t N>
-				requires Integers<T> || FusionStruct<T> || Enums<T> || Pods<T>
-			|| std::is_same_v<T, std::string> || std::is_array_v<T> || std::is_same_v<T, std::chrono::system_clock::time_point>
-				constexpr void operator()(const optional_field<T, N>&field) const {
+			constexpr void operator()(const optional_field<T, N>&field) const {
 				if (field.has_value()) {
 					(*this)(field.value());
 				}
