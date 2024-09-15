@@ -92,7 +92,12 @@ namespace ab {
 			}
 			else if constexpr (std::is_same_v<arg_type, pof::base::currency>) {
 				auto string = variant.GetString().ToStdString();
-				v = pof::base::currency(string);
+				auto pos = string.find_first_of(" ");
+				auto str = string.substr(pos);
+				auto i = std::ranges::remove_if(str, [&](char c) ->bool {return c == ','; });
+				str.erase(i.begin(), i.end());
+
+				v = pof::base::currency(str);
 			}
 			else if constexpr (std::is_same_v<std::string, arg_type>) {
 				v = variant.GetString().ToStdString();

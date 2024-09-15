@@ -642,7 +642,7 @@ void ab::ProductView::GetProducts(size_t begin, size_t limit)
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(std::format("{} :{}", std::source_location::current(), exp.what()));
-		wxMessageBox(exp.what(), "Products", wxICON_ERROR | wxOK);
+		mNoConnectionText->SetLabel(exp.what());
 		mBook->SetSelection(SERVER_ERROR);
 	}
 }
@@ -685,7 +685,8 @@ void ab::ProductView::AppendProducts(size_t from, size_t to)
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(std::format("{} :{}", std::source_location::current(), exp.what()));
-		wxMessageBox(std::format("Cannot load more data {}", exp.what()), "Products", wxICON_ERROR | wxOK);
+		mNoConnectionText->SetLabel(exp.what());
+		mBook->SetSelection(SERVER_ERROR);
 	}
 }
 

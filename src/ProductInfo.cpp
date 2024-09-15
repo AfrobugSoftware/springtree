@@ -820,6 +820,9 @@ void ab::ProductInfo::OnAddStock(wxCommandEvent& evt)
 		pharma_opt.pharmacy_id = cred.pharm_id;
 		pharma_opt.product_id = mSelectedProduct.id;
 		pharma_opt.stock_count = inven.stock_count;
+		pharma_opt.unitprice = pof::base::currency(boost::lexical_cast<double>(mUnitControl->GetValue().ToStdString()));
+		pharma_opt.costprice = pof::base::currency(boost::lexical_cast<double>(mCostControl->GetValue().ToStdString()));
+	
 		const size_t size2 = grape::serial::get_size(cred) + grape::serial::get_size(pharma_opt);
 		grape::body_type body2(size2, 0x00);
 		auto wbuf5 = grape::serial::write(boost::asio::buffer(body2), cred);
