@@ -158,7 +158,7 @@ namespace ab {
 		}
 
 		virtual unsigned int GetCount() const override {
-			return mVirtualCount; //vec_base::size();
+			return std::max(mVirtualCount, vec_base::size());
 		}
 
 		virtual unsigned int GetRow(const wxDataViewItem& item) const override
@@ -200,7 +200,7 @@ namespace ab {
 		}
 
 		constexpr std::array<wxVariant, boost::mpl::size<T>::value>& GetRow(size_t row) {
-			return 	boost::fusion::at_c<2>((*this)[Map(row)]);
+			return boost::fusion::at_c<2>((*this)[Map(row)]);
 		}
 
 		constexpr const std::array<wxVariant, boost::mpl::size<T>::value>& GetRow(size_t row) const {

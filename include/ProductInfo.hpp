@@ -110,6 +110,7 @@ namespace ab {
 		wxPanel* mInventoryWaitPanel;
 		wxPanel* mInventoryEmptyPanel;
 		wxPanel* mInventoryErrorPanel;
+		wxStaticText* mInventoryErrorText;
 		wxActivityIndicator* mInventoryActivity;
 
 

@@ -137,7 +137,7 @@ void ab::ProductInfo::CreateInventoryView()
 	});
 
 	wxButton* mRetry = nullptr;
-	std::tie(mInventoryErrorPanel, std::ignore, mRetry) = app.CreateEmptyPanel(mInventoryBook, "Server error", wxART_ERROR, wxSize(48,48), wxART_MESSAGE_BOX);
+	std::tie(mInventoryErrorPanel, mInventoryErrorText, mRetry) = app.CreateEmptyPanel(mInventoryBook, "Server error", wxART_ERROR, wxSize(48,48), wxART_MESSAGE_BOX);
 	mRetry->SetLabel("Retry");
 	mRetry->SetBitmap(wxArtProvider::GetBitmap("refresh", wxART_OTHER, FromDIP(wxSize(16,16))));
 	mRetry->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
@@ -184,7 +184,7 @@ void ab::ProductInfo::CreateProperyGrid()
 	wxPanel* panel = new wxPanel(this, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(548, -1)), wxNO_BORDER |wxTAB_TRAVERSAL);
 	wxBoxSizer* bs = new wxBoxSizer(wxVERTICAL);
 
-	mProductInfoGridManager = new wxPropertyGridManager(panel, wxID_ANY,
+	mProductInfoGridManager = new wxPropertyGridManager(panel, ID_PROPERTY_GRID,
 		wxDefaultPosition, FromDIP(wxSize(548, -1)), wxPG_BOLD_MODIFIED | wxPG_SPLITTER_AUTO_CENTER |
 		wxPG_TOOLBAR |
 		wxPG_DESCRIPTION |
@@ -339,8 +339,7 @@ void ab::ProductInfo::OnCacheHint(wxDataViewEvent& evt)
 void ab::ProductInfo::OnSave(wxCommandEvent& evt)
 {
 	auto& app = wxGetApp();
-	wxBusyInfo wait("Saving product details\nPlease wait...");
-	if (!mUpdateSet.any() || !mUpdatePharmaSet.any()) return;
+	if (mUpdateSet.none() && mUpdatePharmaSet.none()) return;
 
 	try {
 		grape::credentials cred{
@@ -350,51 +349,64 @@ void ab::ProductInfo::OnSave(wxCommandEvent& evt)
 		app.mPharmacyManager.branch.id };
 		
 		//dumb the data
-		grape::product product;
-		product.id           = mSelectedProduct.id;
-		product.name         = mSelectedProduct.name;
-		product.generic_name = mSelectedProduct.generic_name;
-		product.class_       = mSelectedProduct.cls;
-		product.formulation  = mSelectedProduct.formulation;
-		product.strength     = mSelectedProduct.strength;
-		product.usage_info   = mSelectedProduct.usage_info;
-		product.indications  = mSelectedProduct.indications;
-		product.package_size = mSelectedProduct.package_size;
-		product.sideeffects  = mSelectedProduct.sideeffects;
-		product.barcode      = mSelectedProduct.barcode;
-		grape::bits<grape::product> bitset{ mUpdateSet };
-		grape::uid_t fid{ mSelectedProduct.formulary_id };
-		const size_t size = grape::serial::get_size(cred) +
-			 grape::serial::get_size(product) + grape::serial::get_size(bitset) +  grape::serial::get_size(fid);
-		grape::body_type body(size, 0x00);
-		auto wbuf  = grape::serial::write(boost::asio::buffer(body), cred);
-		auto wbuf2 = grape::serial::write(wbuf,  bitset);
-		auto wbuf3 = grape::serial::write(wbuf2, fid);
-		auto wbuf4 = grape::serial::write(wbuf3, product);
-
 		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
-		auto fut = sess->req(http::verb::post, "/product/formulary/updateproduct", std::move(body));
-		auto resp = fut.get();
-		
-		if (resp.result() != http::status::ok)
-			throw std::logic_error(app.ParseServerError(resp));
+		std::future<grape::session::response_type> fut;
+		grape::session::response_type resp;
+		if (mUpdateSet.any()) {
+			grape::product product;
+			product.id = mSelectedProduct.id;
+			product.name = mSelectedProduct.name;
+			product.generic_name = mSelectedProduct.generic_name;
+			product.class_ = mSelectedProduct.cls;
+			product.formulation = mSelectedProduct.formulation;
+			product.strength = mSelectedProduct.strength;
+			product.usage_info = mSelectedProduct.usage_info;
+			product.indications = mSelectedProduct.indications;
+			product.package_size = mSelectedProduct.package_size;
+			product.sideeffects = mSelectedProduct.sideeffects;
+			product.barcode = mSelectedProduct.barcode;
+			grape::bits<grape::product> bitset{ mUpdateSet };
+			grape::uid_t fid{ mSelectedProduct.formulary_id };
+			const size_t size = grape::serial::get_size(cred) +
+				grape::serial::get_size(product) + grape::serial::get_size(bitset) + grape::serial::get_size(fid);
+			grape::body_type body(size, 0x00);
+			auto wbuf = grape::serial::write(boost::asio::buffer(body), cred);
+			auto wbuf2 = grape::serial::write(wbuf, bitset);
+			auto wbuf3 = grape::serial::write(wbuf2, fid);
+			auto wbuf4 = grape::serial::write(wbuf3, product);
 
-		grape::pharma_product_opt pharma_opt;
-		pharma_opt.branch_id   = cred.branch_id;
-		pharma_opt.pharmacy_id = cred.pharm_id;
-		pharma_opt.product_id  = mSelectedProduct.id;
-		if (mUpdatePharmaSet.test(3))pharma_opt.unitprice   = mSelectedProduct.unit_price;
-		if (mUpdatePharmaSet.test(4))pharma_opt.costprice   = mSelectedProduct.cost_price;
-		const size_t size2 = grape::serial::get_size(cred) + grape::serial::get_size(pharma_opt);
-		grape::body_type body2(size2, 0x00);
-		auto wbuf5 = grape::serial::write(boost::asio::buffer(body2), cred);
-		auto wbuf6 = grape::serial::write(wbuf5, pharma_opt);
+			fut = sess->req(http::verb::post, "/product/formulary/updateproduct", std::move(body));
+			{
+				wxBusyInfo wait("Saving product details\nPlease wait...");
+				resp = std::move(fut.get());
+			}
 
-		fut = sess->req(http::verb::post, "/product/updatepharma", std::move(body2));
-		resp = fut.get();
+			if (resp.result() != http::status::ok)
+				throw std::logic_error(app.ParseServerError(resp));
+		}
 
-		if (resp.result() != http::status::ok)
-			throw std::logic_error(app.ParseServerError(resp));
+		if (mUpdatePharmaSet.any()) {
+			grape::pharma_product_opt pharma_opt;
+			pharma_opt.branch_id = cred.branch_id;
+			pharma_opt.pharmacy_id = cred.pharm_id;
+			pharma_opt.product_id = mSelectedProduct.id;
+			if (mUpdatePharmaSet.test(3))pharma_opt.unitprice = mSelectedProduct.unit_price;
+			if (mUpdatePharmaSet.test(4))pharma_opt.costprice = mSelectedProduct.cost_price;
+			const size_t size2 = grape::serial::get_size(cred) + grape::serial::get_size(pharma_opt);
+			grape::body_type body2(size2, 0x00);
+			auto wbuf5 = grape::serial::write(boost::asio::buffer(body2), cred);
+			auto wbuf6 = grape::serial::write(wbuf5, pharma_opt);
+
+			fut = sess->req(http::verb::post, "/product/updatepharma", std::move(body2));
+			{
+				wxBusyInfo wait("Saving product pharma details\nPlease wait...");
+				resp = fut.get();
+			}
+
+			if (resp.result() != http::status::ok)
+				throw std::logic_error(app.ParseServerError(resp));
+		}
+
 
 		wxMessageBox("Product updated!!", "Product information", wxICON_INFORMATION | wxOK);
 		mUpdateSet.reset();
@@ -402,7 +414,9 @@ void ab::ProductInfo::OnSave(wxCommandEvent& evt)
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(std::format("{}: {}", std::source_location::current(), exp.what()));
-		wxMessageBox(std::format("Failed to save\n{}", exp.what()), "Product Information", wxICON_ERROR | wxOK);
+
+		mInventoryErrorText->SetLabel(std::format("Failed to save\n{}", exp.what()));
+		mInventoryBook->SetSelection(INVEN_ERROR);
 	}
 }
 
@@ -504,7 +518,8 @@ void ab::ProductInfo::GetInventory(size_t begin, size_t limit)
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(std::format("{} :{}", std::source_location::current(), exp.what()));
-		wxMessageBox(exp.what(), "Product information", wxICON_ERROR | wxOK);
+		//wxMessageBox(exp.what(), "Product information", wxICON_ERROR | wxOK);
+		mInventoryErrorText->SetLabel(exp.what());
 		mInventoryBook->SetSelection(INVEN_ERROR);
 	}
 }

@@ -347,6 +347,7 @@ void ab::MainFrame::OnIdle(wxIdleEvent& evt)
 
 		mWelcomePage->Layout();
 	}
+		break;
 	default:
 		break;
 	}

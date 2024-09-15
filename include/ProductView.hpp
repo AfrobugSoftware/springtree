@@ -12,6 +12,7 @@
 #include <wx/button.h>
 #include <wx/filedlg.h>
 #include <wx/progdlg.h>
+#include <wx/creddlg.h>
 
 #include <memory>
 #include <stack>
@@ -54,6 +55,7 @@ namespace ab {
 			ID_CREATE_FORMULARY,
 			ID_SEARH_TIMER,
 			ID_SELECT,
+			ID_DELETE_PRODUCT,
 		};
 
 		enum {
@@ -108,6 +110,7 @@ namespace ab {
 		void OnSelect(wxCommandEvent& evt);
 		void OnUpdateBook(wxUpdateUIEvent& evt);
 		void OnHeaderClick(wxDataViewEvent& evt);
+		void OnDeleteProduct(wxCommandEvent& evt);
 		
 
 		//grape functions 

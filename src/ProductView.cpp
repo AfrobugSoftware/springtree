@@ -17,7 +17,8 @@ BEGIN_EVENT_TABLE(ab::ProductView, wxPanel)
 	//menu
 	EVT_MENU(ab::ProductView::ID_IMPORT_FORMULARY, ab::ProductView::OnImportFormulary)
 	EVT_MENU(ab::ProductView::ID_EXPORT_FORMULARY, ab::ProductView::OnExportFormulary)
-	
+	EVT_MENU(ab::ProductView::ID_DELETE_PRODUCT,   ab::ProductView::OnDeleteProduct)
+
 	//Search
 	EVT_SEARCH(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearch)
 	EVT_SEARCH_CANCEL(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearchCleared)
@@ -87,12 +88,14 @@ void ab::ProductView::CreateView()
 
 	ab::DataModel<ab::pproduct>::specialcol_t col;
 	col.first = [&](wxVariant& v, int row, int col) {
+		if (mModel->empty()) return;
 		auto& arr = mModel->GetRow(row);
 		v = std::format("{} {}", arr[7].GetString().ToStdString(), arr[8].GetString().ToStdString());
 	};
 
 	ab::DataModel<ab::pproduct>::specialcol_t SelectionCol;
 	SelectionCol.first = [&](wxVariant& variant, size_t row, size_t col) {
+		if (mModel->empty()) return;
 		auto& rv = mModel->GetRow(row);
 		auto found = mSelections.find(rv[0].GetString().ToStdString());
 		variant = wxVariant((found != mSelections.end()));
@@ -190,10 +193,10 @@ void ab::ProductView::CreateProductInfo()
 		if (!toptool.IsOk() || !bottoll.IsOk()) return;
 		toptool.Show(true);
 		bottoll.Show(true);
-		mManager.Update();
 
 		mProductInfo->UnLoad();
 		mBook->SetSelection(VIEW);
+		mManager.Update();
 	};
 	mBook->AddPage(mProductInfo, "Product info", false);
 }
@@ -461,6 +464,89 @@ void ab::ProductView::OnHeaderClick(wxDataViewEvent& evt)
 {
 }
 
+void ab::ProductView::OnDeleteProduct(wxCommandEvent& evt)
+{
+	if (wxMessageBox("Deleteing a product deletes all the data associated with the product, Do you wish to continue?", "Remove Product", wxICON_WARNING | wxYES_NO) == wxNO) return;
+	auto& app = wxGetApp();
+	try {
+		wxCredentialEntryDialog dialog(this, "User credentials are required to remove this item", "Products");
+		dialog.Center(wxBOTH);
+		dialog.SetBackgroundColour(*wxWHITE);
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+		grape::credentials cred{
+		app.mPharmacyManager.account.account_id,
+		app.mPharmacyManager.account.session_id.value(),
+		app.mPharmacyManager.pharmacy.id,
+		app.mPharmacyManager.branch.id };
+
+		while (1) {
+			if (dialog.ShowModal() == wxID_CANCEL) return;
+			auto gcred = dialog.GetCredentials();
+			grape::account_cred acred;
+			acred.pharmacy_id = app.mPharmacyManager.pharmacy.id;
+			acred.type = app.mPharmacyManager.account.type;
+			acred.username = gcred.GetUser().ToStdString();
+			acred.password = gcred.GetPassword().GetAsString().ToStdString();
+
+			
+			const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(acred);
+			grape::session::request_type::body_type::value_type body(size, 0x00);
+			auto buf = grape::serial::write(boost::asio::buffer(body), cred);
+			auto buf2 = grape::serial::write(buf, acred);
+
+			auto fut = sess->req(http::verb::get, "/account/verifyuser", std::move(body));
+			grape::session::response_type resp;
+			{
+				wxBusyInfo wait("Verifying user\nPlease wait...");
+				resp = std::move(fut.get());
+			}
+			if (resp.result() != http::status::ok)
+			{
+				wxMessageBox("Invalid user credentials", "Products", wxICON_WARNING | wxOK);
+				continue;
+			}
+			break;
+		}
+		grape::collection_type<grape::uid_t> mProducts;
+		auto& pp = boost::fusion::at_c<0>(mProducts);
+		if (mSelections.empty()) 
+		{
+			auto item = mView->GetSelection();
+			if (!item.IsOk()) return;
+			auto& a = mModel->GetRow(ab::DataModel<ab::pproduct>::FromDataViewItem(item));
+			pp.push_back(grape::uid_t{ boost::lexical_cast<boost::uuids::uuid>(a[0].GetString().ToStdString()) });
+		}
+		else {
+			wxBusyInfo wait("Packing products\nPlease wait...");
+			pp.reserve(mSelections.size());
+			for (auto& s : mSelections) {
+				pp.emplace_back(grape::uid_t{ boost::lexical_cast<boost::uuids::uuid>(s) });
+			}
+		}
+		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(mProducts);
+		grape::session::request_type::body_type::value_type body(size, 0x00);
+		auto buf  = grape::serial::write(boost::asio::buffer(body), cred);
+		auto buf2 = grape::serial::write(buf, mProducts);
+
+		auto fut = sess->req(http::verb::delete_, "/product/remove", std::move(body));
+		grape::session::response_type resp;
+		{
+			wxBusyInfo wait("Removing products\nPlease wait...");
+			resp = std::move(fut.get());
+		}
+		if (resp.result() != http::status::ok)
+			throw std::logic_error(app.ParseServerError(resp));
+		//refresh ??
+		Load(); 
+
+		wxMessageBox("Product removed", "Products", wxICON_INFORMATION | wxOK);
+	}
+	catch (const std::exception& exp) {
+		spdlog::error(exp.what());
+		wxMessageBox(std::format("Cannnot remove product {}", exp.what()), "Products", wxICON_ERROR | wxOK);
+	}
+}
+
 
 void ab::ProductView::OnSearch(wxCommandEvent& evt)
 {
@@ -510,6 +596,19 @@ void ab::ProductView::OnContextMenu(wxDataViewEvent& evt)
 	auto item = evt.GetItem();
 	if (!item.IsOk()) return;
 	wxMenu* menu = new wxMenu;
+	wxMenuItem* dp = nullptr;
+
+	if (mSelections.empty()) {
+		dp = menu->Append(ID_DELETE_PRODUCT, "Remove product", "Removes product from branch");
+	}
+	else 
+	{
+		const size_t count = mSelections.size();
+		dp = menu->Append(ID_DELETE_PRODUCT, std::format("Remove {:d} products", count), "Removes product from branch");
+	}
+
+	dp->SetBackgroundColour(*wxWHITE);
+	dp->SetBitmap(wxArtProvider::GetBitmap("delete", wxART_OTHER, FromDIP(wxSize(16,16))));
 
 
 	mView->PopupMenu(menu);
@@ -561,9 +660,13 @@ void ab::ProductView::OnItemActivated(wxDataViewEvent& evt)
 void ab::ProductView::OnFormularyToolbar(wxAuiToolBarEvent& evt)
 {
 	wxMenu* menu = new wxMenu;
-	menu->Append(ID_CREATE_FORMULARY, "Create", nullptr);
-	menu->Append(ID_IMPORT_FORMULARY, "Import", nullptr);
-	menu->Append(ID_EXPORT_FORMULARY, "Export", nullptr);
+	auto c = menu->Append(ID_CREATE_FORMULARY, "Create", nullptr);
+	auto i = menu->Append(ID_IMPORT_FORMULARY, "Import", nullptr);
+	auto e = menu->Append(ID_EXPORT_FORMULARY, "Export", nullptr);
+
+	c->SetBitmap(wxArtProvider::GetBitmap("create", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	i->SetBitmap(wxArtProvider::GetBitmap("upload", wxART_OTHER, FromDIP(wxSize(16, 16))));
+	e->SetBitmap(wxArtProvider::GetBitmap("download", wxART_OTHER, FromDIP(wxSize(16, 16))));
 
 	wxPoint pos = mFormularyTool->GetSizerItem()->GetPosition();
 	wxSize sz = mFormularyTool->GetSizerItem()->GetSize();
