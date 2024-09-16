@@ -56,6 +56,7 @@ namespace ab {
 			ID_SEARH_TIMER,
 			ID_SELECT,
 			ID_DELETE_PRODUCT,
+			ID_OPEN_PRODUCT,
 		};
 
 		enum {
@@ -111,7 +112,7 @@ namespace ab {
 		void OnUpdateBook(wxUpdateUIEvent& evt);
 		void OnHeaderClick(wxDataViewEvent& evt);
 		void OnDeleteProduct(wxCommandEvent& evt);
-		
+		void OnOpenProduct(wxCommandEvent& evt);
 
 		//grape functions 
 		void GetProducts(size_t begin, size_t limit);

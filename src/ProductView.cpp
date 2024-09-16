@@ -18,6 +18,7 @@ BEGIN_EVENT_TABLE(ab::ProductView, wxPanel)
 	EVT_MENU(ab::ProductView::ID_IMPORT_FORMULARY, ab::ProductView::OnImportFormulary)
 	EVT_MENU(ab::ProductView::ID_EXPORT_FORMULARY, ab::ProductView::OnExportFormulary)
 	EVT_MENU(ab::ProductView::ID_DELETE_PRODUCT,   ab::ProductView::OnDeleteProduct)
+	EVT_MENU(ab::ProductView::ID_OPEN_PRODUCT,	   ab::ProductView::OnOpenProduct)
 
 	//Search
 	EVT_SEARCH(ab::ProductView::ID_SEARCH, ab::ProductView::OnSearch)
@@ -488,11 +489,8 @@ void ab::ProductView::OnDeleteProduct(wxCommandEvent& evt)
 			acred.username = gcred.GetUser().ToStdString();
 			acred.password = gcred.GetPassword().GetAsString().ToStdString();
 
-			
-			const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(acred);
-			grape::session::request_type::body_type::value_type body(size, 0x00);
-			auto buf = grape::serial::write(boost::asio::buffer(body), cred);
-			auto buf2 = grape::serial::write(buf, acred);
+			grape::session::request_type::body_type::value_type body(grape::serial::get_size(acred), 0x00);
+			auto buf = grape::serial::write(boost::asio::buffer(body), acred);
 
 			auto fut = sess->req(http::verb::get, "/account/verifyuser", std::move(body));
 			grape::session::response_type resp;
@@ -509,7 +507,8 @@ void ab::ProductView::OnDeleteProduct(wxCommandEvent& evt)
 		}
 		grape::collection_type<grape::uid_t> mProducts;
 		auto& pp = boost::fusion::at_c<0>(mProducts);
-		if (mSelections.empty()) 
+		const bool selections = !mSelections.empty();
+		if (!selections) 
 		{
 			auto item = mView->GetSelection();
 			if (!item.IsOk()) return;
@@ -537,14 +536,48 @@ void ab::ProductView::OnDeleteProduct(wxCommandEvent& evt)
 		if (resp.result() != http::status::ok)
 			throw std::logic_error(app.ParseServerError(resp));
 		//refresh ??
-		Load(); 
-
-		wxMessageBox("Product removed", "Products", wxICON_INFORMATION | wxOK);
+		//or just delete what we want to delete?
+		if (!selections) {
+			auto item = mView->GetSelection();
+			size_t idx = ab::DataModel<ab::pproduct>::FromDataViewItem(item);
+			auto iter = std::next(mModel->begin(), idx);
+			mModel->erase(iter);
+		}
+		else {
+			auto sub = std::ranges::remove_if(*mModel, [&](const auto& v) -> bool {
+				auto& a = boost::fusion::at_c<2>(v);
+				return (mSelections.find(a[0].GetString().ToStdString()) != mSelections.end());
+			});
+			mModel->erase(sub.begin(), sub.end());
+		}
+		if (mModel->empty()) {
+			mBook->SetSelection(EMPTY);
+		}
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());
 		wxMessageBox(std::format("Cannnot remove product {}", exp.what()), "Products", wxICON_ERROR | wxOK);
 	}
+}
+
+void ab::ProductView::OnOpenProduct(wxCommandEvent& evt)
+{
+	auto item = mView->GetSelection();
+	if (!item.IsOk()) return;
+
+	//hide toobars
+	auto& toptool = mManager.GetPane("TopToolBar");
+	auto& bottoll = mManager.GetPane("BottomToolBar");
+	if (!toptool.IsOk() || !bottoll.IsOk()) return;
+	toptool.Show(false);
+	bottoll.Show(false);
+	mManager.Update();
+
+	mProductInfo->mSelectedProduct = ab::make_struct<ab::pproduct>
+		(mModel->GetRow(ab::DataModel<ab::pproduct>::FromDataViewItem(item)));
+	mProductInfo->Load();
+
+	mBook->SetSelection(INFO);
 }
 
 
@@ -597,7 +630,11 @@ void ab::ProductView::OnContextMenu(wxDataViewEvent& evt)
 	if (!item.IsOk()) return;
 	wxMenu* menu = new wxMenu;
 	wxMenuItem* dp = nullptr;
-
+	wxMenuItem* op = nullptr;
+	
+	op = menu->Append(ID_OPEN_PRODUCT, "Open", "Removes product from branch");
+	
+	menu->AppendSeparator();
 	if (mSelections.empty()) {
 		dp = menu->Append(ID_DELETE_PRODUCT, "Remove product", "Removes product from branch");
 	}
@@ -607,7 +644,7 @@ void ab::ProductView::OnContextMenu(wxDataViewEvent& evt)
 		dp = menu->Append(ID_DELETE_PRODUCT, std::format("Remove {:d} products", count), "Removes product from branch");
 	}
 
-	dp->SetBackgroundColour(*wxWHITE);
+	op->SetBitmap(wxArtProvider::GetBitmap("folder_open", wxART_OTHER, FromDIP(wxSize(16,16))));
 	dp->SetBitmap(wxArtProvider::GetBitmap("delete", wxART_OTHER, FromDIP(wxSize(16,16))));
 
 
