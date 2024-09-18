@@ -45,6 +45,7 @@ ab::ProductView::ProductView(wxWindow* parent, wxWindowID id, const wxPoint& pos
 	CreateBottomTool();
 
 
+
 	CreateView();
 	CreateProductInfo();
 
@@ -463,6 +464,35 @@ void ab::ProductView::OnUpdateBook(wxUpdateUIEvent& evt)
 
 void ab::ProductView::OnHeaderClick(wxDataViewEvent& evt)
 {
+	//if (mSelectCol && mSelectCol == evt.GetDataViewColumn()) {
+	//	static bool sel = true; //
+	//	mView->Freeze();
+	//	//auto& items = wxGetApp().mProductManager.GetProductData()->GetDataViewItems();
+	//	if (sel) {
+	//		if (!mSelections.empty()) {
+	//			mSelections.clear();
+	//			mView->SetSelections({});
+	//			sel = false;
+	//		}
+	//		else {
+	//			//randg
+	//			//std::ranges::copy(items, std::inserter(mSelections, mSelections.end()));
+	//		}
+	//	}
+	//	else {
+	//		for (auto& item : items) {
+	//			mSelections.erase(item);
+	//		}
+	//	}
+	//	sel = !sel;
+	//	m_dataViewCtrl1->Thaw();
+	//	m_dataViewCtrl1->Refresh();
+	//	evt.Veto();
+	//}
+	//else {
+	//	evt.Skip();
+	//}
+
 }
 
 void ab::ProductView::OnDeleteProduct(wxCommandEvent& evt)
@@ -724,8 +754,21 @@ void ab::ProductView::OnWorkspaceNotification(ab::Workspace::notif notif, wxWind
 	case ab::Workspace::notif::opened:
 	case ab::Workspace::notif::added:
 	case ab::Workspace::notif::shown:
+	{
+		auto& toptool = mManager.GetPane("TopToolBar");
+		auto& bottoll = mManager.GetPane("BottomToolBar");
+		if (!toptool.IsOk() || !bottoll.IsOk()) return;
+		if (!toptool.IsShown() || !bottoll.IsShown())
+		{
+			toptool.Show(true);
+			bottoll.Show(true);
+			mManager.Update();
+		}
+
+	
 		Load();
 		break;
+	}
 	case ab::Workspace::notif::hidden:
 		break;
 	default:

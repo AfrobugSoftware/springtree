@@ -349,6 +349,13 @@ namespace grape {
 		dispenser,
 		sale_assistant
 	};
+
+	enum class sale_state : std::uint32_t {
+		returned,
+		complete,
+		pending,
+		deleted,
+	};
 };
 
 //accounts
@@ -418,6 +425,37 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(std::int64_t, category_id)
 	(std::int64_t, min_stock_count)
 )
+
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape), sale,
+	(boost::uuids::uuid, pharmacy_id)
+	(boost::uuids::uuid, branch_id)
+	(boost::uuids::uuid, user_id)
+	(boost::uuids::uuid, id)
+	(boost::uuids::uuid, product_id)
+	(std::chrono::system_clock::time_point, sale_date)
+	(pof::base::currency, unit_cost)
+	(pof::base::currency, unit_price)
+	(pof::base::currency, total)
+	(std::uint32_t, quantity)
+	(pof::base::currency, discount)
+	(std::string, payment_method)
+	(std::string, payment_addinfo)
+	(std::string, product_label)
+	(grape::sale_state, state)
+	(std::string, add_info)
+)
+
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape), sale_display,
+	(std::string, name)
+	(std::int32_t, quantity)
+	(pof::base::currency, unit_price)
+	(pof::base::currency, discount)
+	(pof::base::currency, total)
+	(boost::uuids::uuid, prod_id)
+)
+
 
 BOOST_FUSION_DEFINE_STRUCT(
 	(grape), sale_history,

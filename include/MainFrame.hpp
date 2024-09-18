@@ -17,6 +17,7 @@
 #include "AuiTheme.hpp"
 
 #include "ProductView.hpp"
+#include "SaleView.hpp"
 
 namespace ab {
 	class MainFrame : public wxFrame
@@ -77,6 +78,7 @@ namespace ab {
 		ab::Modules* mModules = nullptr;
 
 		ab::ProductView* mProductView = nullptr;
+		ab::SaleView* mSaleView = nullptr;
 
 		DECLARE_EVENT_TABLE()
 	};

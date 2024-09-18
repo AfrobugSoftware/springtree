@@ -100,7 +100,7 @@ void ab::MainFrame::CreateModules()
 
 	mod = ab::mod{};
 	mod.callback = std::bind_front(&ab::MainFrame::OnModuleActivated, this);
-	mod.win = nullptr;
+	mod.win = mSaleView;
 	mod.name = "Sales";
 	mod.img = 1;
 	mod.id = mModules->mSales;
@@ -114,6 +114,9 @@ void ab::MainFrame::CreateWorkspace()
 
 	mProductView = new ab::ProductView(mWorkspace, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
 	mWorkspace->notifsignal.connect(std::bind_front(&ab::ProductView::OnWorkspaceNotification, mProductView));
+
+	mSaleView = new ab::SaleView(mWorkspace, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxNO_BORDER);
+
 }
 
 void ab::MainFrame::CreateWelcomePage()
