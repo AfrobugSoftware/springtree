@@ -254,6 +254,11 @@ namespace ab {
 			 mSpecialColMap.insert({ col, std::forward<sp_value>(value) });
 		}
 
+		void Add(const std::array<wxVariant, boost::mpl::size<T>::value>& value) {
+			typename vec_base::value_type v{};
+			boost::fusion::at_c<2>(v) = value;
+			vec_base::push_back(std::move(v));
+		}
 	private:
 		constexpr size_t Map(size_t idx) const {
 			return idx % vec_base::size();	
