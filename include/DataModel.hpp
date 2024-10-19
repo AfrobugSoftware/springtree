@@ -258,6 +258,7 @@ namespace ab {
 			typename vec_base::value_type v{};
 			boost::fusion::at_c<2>(v) = value;
 			vec_base::push_back(std::move(v));
+			RowAppended();
 		}
 	private:
 		constexpr size_t Map(size_t idx) const {

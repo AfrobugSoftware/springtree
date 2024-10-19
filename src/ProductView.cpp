@@ -7,6 +7,7 @@ BEGIN_EVENT_TABLE(ab::ProductView, wxPanel)
 	EVT_TOOL(wxID_FORWARD, ab::ProductView::OnForward)
 	EVT_TOOL(ab::ProductView::ID_SELECT, ab::ProductView::OnSelect)
 	EVT_TOOL(ab::ProductView::ID_ADD_PRODUCT, ab::ProductView::OnAddProduct)
+	EVT_TOOL(ab::ProductView::ID_OPEN_INVOICES, ab::ProductView::OnInvoiceView)
 	EVT_AUITOOLBAR_TOOL_DROPDOWN(ab::ProductView::ID_FORMULARY, ab::ProductView::OnFormularyToolbar)
 	
 	//updates
@@ -139,9 +140,9 @@ void ab::ProductView::CreatePanels()
 	mEmptyButton->SetLabel("Add product");
 	mEmptyButton->Bind(wxEVT_BUTTON, std::bind_front(&ab::ProductView::OnAddProduct, this));
 
-	mNoConnectionButton->SetLabel("Retry");
+	mNoConnectionButton->SetLabel("Reload products");
 	mNoConnectionButton->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
-		
+		Load();
 	});
 
 	mBook->AddPage(mWaitPanel,"Wait", true);
@@ -181,6 +182,8 @@ void ab::ProductView::CreateBottomTool()
 	mBottomTool->AddSpacer(FromDIP(10));
 	mFormularyTool = mBottomTool->AddTool(ID_FORMULARY, "Formulary", wxArtProvider::GetBitmap("edit_note", wxART_OTHER, FromDIP(wxSize(16, 16))), "Formulary");
 	mFormularyTool->SetHasDropDown(true);
+	mBottomTool->AddSpacer(FromDIP(10));
+	mBottomTool->AddTool(ID_OPEN_INVOICES, "Invoices", wxArtProvider::GetBitmap("menu_book", wxART_OTHER, FromDIP(wxSize(16,16))), "Invoices");
 
 	mBottomTool->Realize();
 	mManager.AddPane(mBottomTool, wxAuiPaneInfo().Name("BottomToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(2).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
@@ -610,6 +613,10 @@ void ab::ProductView::OnOpenProduct(wxCommandEvent& evt)
 	mBook->SetSelection(INFO);
 }
 
+void ab::ProductView::OnInvoiceView(wxCommandEvent& evt)
+{
+}
+
 
 void ab::ProductView::OnSearch(wxCommandEvent& evt)
 {
@@ -826,6 +833,7 @@ void ab::ProductView::GetProducts(size_t begin, size_t limit)
 	catch (const std::exception& exp) {
 		spdlog::error(std::format("{} :{}", std::source_location::current(), exp.what()));
 		mNoConnectionText->SetLabel(exp.what());
+		mNoConnectionPanel->Layout();
 		mBook->SetSelection(SERVER_ERROR);
 	}
 }

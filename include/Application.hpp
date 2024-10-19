@@ -88,7 +88,7 @@ namespace ab {
 		void DecorateSplashScreen(wxBitmap& bmp);
 		bool LoadSettings();
 		bool SaveSettings();
-
+		bool SessionSignIn();
 		grape::app_details mAppDetails;
 		grape::credentials mSessionCredentials;
 		grape::address mAppAddress;
@@ -100,6 +100,10 @@ namespace ab {
 		pof::base::net_manager mNetManager;
 		pof::base::task_manager mTaskManager;
 		std::string gVersion;
+
+		//session sign in
+		bool mRememberMe = false; 
+		grape::session_cred mSessCred;
 
 		//creation functions for test
 		void CreateAddress();

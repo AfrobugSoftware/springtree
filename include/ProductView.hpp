@@ -57,6 +57,7 @@ namespace ab {
 			ID_SELECT,
 			ID_DELETE_PRODUCT,
 			ID_OPEN_PRODUCT,
+			ID_OPEN_INVOICES,
 		};
 
 		enum {
@@ -113,7 +114,7 @@ namespace ab {
 		void OnHeaderClick(wxDataViewEvent& evt);
 		void OnDeleteProduct(wxCommandEvent& evt);
 		void OnOpenProduct(wxCommandEvent& evt);
-
+		void OnInvoiceView(wxCommandEvent& evt);
 		//grape functions 
 		void GetProducts(size_t begin, size_t limit);
 		void AppendProducts(size_t from, size_t to);

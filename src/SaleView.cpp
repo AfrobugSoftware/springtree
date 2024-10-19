@@ -11,7 +11,9 @@ BEGIN_EVENT_TABLE(ab::SaleView, wxPanel)
 	EVT_SEARCH(ab::SaleView::ID_PRODUCT_SEARCH_NAME, ab::SaleView::OnProductSearch)
 	EVT_TEXT(ab::SaleView::ID_PRODUCT_SEARCH_NAME, ab::SaleView::OnProductSearch)
 	EVT_SEARCH_CANCEL(ab::SaleView::ID_PRODUCT_SEARCH_NAME, ab::SaleView::OnProductSearchCleared)
+	EVT_AUINOTEBOOK_PAGE_CLOSE(ab::SaleView::ID_SALE_BOOK, ab::SaleView::OnSaleNotebookClosing)
 	EVT_AUINOTEBOOK_PAGE_CLOSED(ab::SaleView::ID_SALE_BOOK, ab::SaleView::OnSaleNotebookClosed)
+	EVT_AUINOTEBOOK_PAGE_CHANGED(ab::SaleView::ID_SALE_BOOK, ab::SaleView::OnSaleNotebookChanged)
 END_EVENT_TABLE()
 
 
@@ -167,7 +169,7 @@ void ab::SaleView::CreateView()
 	view->AppendTextColumn(wxT("Discount"),     3, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_CENTER);
 	view->AppendTextColumn(wxT("Extact Price"), 4, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_CENTER);
 	
-	mSaleNotebook->AddPage(view, fmt::format("Sales - {:d}", mSaleView.size()), true,0);
+	mSaleNotebook->AddPage(view, fmt::format("Sales - {:d}", mSaleView.size()), true, 0);
 }
 
 void ab::SaleView::CreateMainPane()
@@ -200,7 +202,7 @@ void ab::SaleView::CreateMainPane()
 	wxBoxSizer* bSizer2;
 	bSizer2 = new wxBoxSizer(wxVERTICAL);
 
-	mSaleDisplayPane = new wxPanel(mSaleOutputPane, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxDOUBLE_BORDER | wxTAB_TRAVERSAL);
+	mSaleDisplayPane = new wxPanel(mSaleOutputPane, ID_PAY_VIEW, wxDefaultPosition, wxDefaultSize, wxDOUBLE_BORDER | wxTAB_TRAVERSAL);
 	wxBoxSizer* bSizer3;
 	bSizer3 = new wxBoxSizer(wxHORIZONTAL);
 
@@ -334,10 +336,12 @@ void ab::SaleView::OnSave(wxCommandEvent& evt)
 
 void ab::SaleView::OnNewSale(wxCommandEvent& evt)
 {
-
+		CreateView();
+		if(mBook->GetSelection() != SALE_NOTEBOOK)
+			mBook->SetSelection(SALE_NOTEBOOK);
 }
 
-void ab::SaleView::OnSaleNotebookClosed(wxAuiNotebookEvent& evt)
+void ab::SaleView::OnSaleNotebookClosing(wxAuiNotebookEvent& evt)
 {
 	auto idx = evt.GetSelection();
 	if (idx == wxNOT_FOUND) return;
@@ -346,18 +350,32 @@ void ab::SaleView::OnSaleNotebookClosed(wxAuiNotebookEvent& evt)
 	if (!model) return;
 
 	if (model->size() != 0 &&
-		(wxMessageBox("Sale contains items that are sold, are you sure you want to close sale?",
-			"Sale", wxICON_WARNING | wxYES_NO) == wxNO)) return;
-
-	if (view->Destroy()) {
-		delete view;
-		mSaleView.erase(std::next(mSaleView.begin(), idx));
-
+		(wxMessageBox("Sale contains items that not are sold, are you sure you want to close sale?",
+			"Sale", wxICON_WARNING | wxYES_NO) == wxNO))
+	{
+		evt.Veto();
+		return;
 	}
-	else {
-		wxMessageBox("Fatal error, cannot destroy view, call admin", "Sales", wxICON_ERROR | wxOK);
-		std::terminate();
-	}
+
+	
+}
+
+void ab::SaleView::OnSaleNotebookClosed(wxAuiNotebookEvent& evt)
+{
+	auto idx = evt.GetSelection();
+	if (idx == wxNOT_FOUND) return;
+	auto& view = mSaleView[idx];
+	mSaleView.erase(std::next(mSaleView.begin(), idx));
+	
+
+	if (mSaleView.empty())
+		mBook->SetSelection(SALE_EMPTY);
+}
+
+void ab::SaleView::OnSaleNotebookChanged(wxAuiNotebookEvent& evt)
+{
+	ClearTotals();
+	UpdateTotals();
 }
 
 void ab::SaleView::OnOpenPacks(wxCommandEvent& evt)
@@ -384,6 +402,8 @@ void ab::SaleView::OnProductSearch(wxCommandEvent& evt)
 
 void ab::SaleView::OnProductSearchCleared(wxCommandEvent& evt)
 {
+	mSearchPopup->Dismiss();
+	mProductNameValue->Clear();
 }
 
 void ab::SaleView::OnSearchedProduct(const grape::sale_display& saleproduct)
@@ -402,16 +422,77 @@ void ab::SaleView::OnSearchedProduct(const grape::sale_display& saleproduct)
 	auto model = dynamic_cast<ab::DataModel<grape::sale_display>*>(view->GetModel());
 	if (!model) return;
 	auto str = boost::lexical_cast<std::string>(saleproduct.prod_id);
-	if (std::any_of(model->begin(), model->end(), [&](const auto& item) -> bool {
+	if (std::any_of(model->begin(), model->end(), [&](auto& item) -> bool {
 			auto& v = boost::fusion::at_c<2>(item);
-			return (str == v[0].GetString());
+			auto str2 = v[5].GetString().ToStdString();
+			if (str == str2) {
+				std::int64_t count = v[1].GetLong();
+				v[1] = wxVariant(std::to_string(++count));
+				return true;
+			}
+			else return false;
 	})) {
-		wxMessageBox(std::format("{} already added, change the quantity if you want to add more than one",
-			saleproduct.name), "Sales", wxICON_WARNING | wxOK);
-		return;
+		view->Refresh();
 	}
-	auto v = ab::make_variant<grape::sale_display>(std::move(const_cast<grape::sale_display&>(saleproduct)));
-	model->Add(v);
+	else {
+		auto v = ab::make_variant<grape::sale_display>(std::move(const_cast<grape::sale_display&>(saleproduct)));
+		model->Add(v);
+	}
+	UpdateTotals();
+}
+
+void ab::SaleView::ClearTotals()
+{
+	Freeze();
+	mQuantityValue->SetLabel(std::to_string(0ll));
+	mDiscountValue->SetLabel(fmt::format("{:cu}", pof::base::currency{}));
+	mExtQuantityItem->SetLabel(std::to_string(0ll));
+	mTotalQuantityValue->SetLabel(std::to_string(0ll)); //redundnat
+	mTotalAmount->SetLabel(fmt::format("{:cu}", pof::base::currency{}));
+	Thaw();
+	mTextOutPut->Layout();
+	mSalePaymentButtonsPane->Layout();
+}
+
+void ab::SaleView::UpdateTotals()
+{
+	int idx = mSaleNotebook->GetSelection();
+	if (idx == wxNOT_FOUND) return;
+
+	auto& view = mSaleView[idx];
+	auto model = dynamic_cast<ab::DataModel<grape::sale_display>*>(view->GetModel());
+	if (!model || model->empty()) return;
+
+	std::uint64_t quan = 0;
+	pof::base::currency total{};
+	pof::base::currency totalDiscount{};
+	auto funCur = [&](const std::string& string) -> pof::base::currency
+		{
+			auto pos = string.find_first_of(" ");
+			auto str = string.substr(pos);
+			auto i = std::ranges::remove_if(str,
+				[&](char c) ->bool {return c == ','; });
+			str.erase(i.begin(), i.end());
+
+			return pof::base::currency(str);
+		};
+
+	for (auto& item : *model) {
+		const auto& v = boost::fusion::at_c<2>(item);
+		quan += v[1].GetLong();
+		total += funCur(v[4].GetString().ToStdString());
+		totalDiscount += funCur(v[3].GetString().ToStdString());
+	}
+
+	Freeze();
+	mQuantityValue->SetLabel(std::to_string(model->size()));
+	mDiscountValue->SetLabel(fmt::format("{:cu}", totalDiscount));
+	mExtQuantityItem->SetLabel(std::to_string(quan));
+	mTotalQuantityValue->SetLabel(std::to_string(quan)); //redundnat
+	mTotalAmount->SetLabel(fmt::format("{:cu}", total));
+	Thaw();
+	mTextOutPut->Layout();
+	mSalePaymentButtonsPane->Layout();
 }
 
 void ab::SearchPopup::SetNext(bool forward)
@@ -436,7 +517,6 @@ void ab::SearchPopup::SetActivated()
 	if (!item.IsOk()) return;
 
 	Dismiss();
-	wxBusyInfo wait("Loading\nPlease wait...");
 
 	const int r = mTableModel->GetRow(item);
 	auto row = ab::make_struct<ab::pproduct>(mTableModel->GetRow(r));
@@ -457,7 +537,6 @@ void ab::SearchPopup::Search(const std::string& str)
 	if (!mSearching) {
 		if (std::ranges::all_of(str, [](char s) {return std::isspace(s); }))
 			return;
-
 		mBook->SetSelection(WAIT);
 		mActivity->Start();
 		mSearchString = str;
@@ -489,6 +568,7 @@ void ab::SearchPopup::SearchProducts(std::string&& sstring)
 		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
 
 		auto fut = sess->req(http::verb::get, "/product/search", std::move(body));
+		
 		auto resp = fut.get();
 		if (resp.result() == http::status::not_found) {
 			mBook->SetSelection(NO_RESULT);
@@ -520,12 +600,24 @@ void ab::SearchPopup::SearchProducts(std::string&& sstring)
 	}
 }
 
+void ab::SearchPopup::SetupAuiTheme()
+{
+	auto auiart = mPopManager.GetArtProvider();
+	ab::AuiTheme::Update(auiart);
+	ab::AuiTheme::Register(std::bind_front(&ab::SearchPopup::OnAuiThemeChange, this));
+}
+
+void ab::SearchPopup::OnAuiThemeChange()
+{
+	auto auiart = mPopManager.GetArtProvider();
+	ab::AuiTheme::Update(auiart);
+}
+
 void ab::SearchPopup::OnDataItemSelected(wxDataViewEvent& evt)
 {
 	auto item = evt.GetItem();
 	if (!item.IsOk()) return;
 	Dismiss();
-	wxBusyInfo wait("Loading\nPlease wait...");
 
 	const int r = mTableModel->GetRow(item);
 	auto row    = ab::make_struct<ab::pproduct>(mTableModel->GetRow(r));
@@ -571,13 +663,19 @@ bool ab::SearchPopup::CheckProduct(const ab::pproduct& product)
 
 		auto fut = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl())
 		->req(http::verb::get, "/product/expired/check", std::move(body));
-		auto resp = fut.get();
-		if (resp.result() == http::status::ok) {
+		grape::session::response_type resp;
+		{
+			wxBusyInfo wait("Checking expired\nPlease wait...");
+			resp = std::move(fut.get());
+		}
+		switch (resp.result())
+		{
+		case http::status::ok:
 			wxMessageBox(std::format("{} is expired", product.name), "Sales", wxICON_WARNING | wxOK);
 			return false;
-		}
-		else if (resp.result() != http::status::not_found)
-		{
+		case http::status::not_found:
+			break;
+		default:
 			throw std::logic_error(app.ParseServerError(resp));
 		}
 	}
@@ -589,9 +687,9 @@ bool ab::SearchPopup::CheckProduct(const ab::pproduct& product)
 }
 
 ab::SearchPopup::SearchPopup(wxWindow* parent)
-	: wxPopupTransientWindow(parent, wxBORDER_NONE), mPopManager(this), mSearching{false} {
+	: wxPopupTransientWindow(parent, wxBORDER_NONE), mPopManager(this, ab::AuiTheme::AUIMGRSTYLE), mSearching{false} {
 	auto& app = wxGetApp();
-	mBook = new wxSimplebook(this, wxID_ANY);
+	mBook = new wxSimplebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSIMPLE_BORDER | wxTAB_TRAVERSAL);
 	mTableModel = new ab::DataModel<ab::pproduct>();
 	mTable = new wxDataViewCtrl(mBook, 
 		ID_DATA_VIEW, wxDefaultPosition, wxDefaultSize, wxNO_BORDER | wxDV_ROW_LINES | wxDV_HORIZ_RULES);
@@ -624,6 +722,7 @@ ab::SearchPopup::SearchPopup(wxWindow* parent)
 		boost::asio::post(wxGetApp().mTaskManager.tp(),
 			std::bind_front(&ab::SearchPopup::SearchProducts, this, mSearchString));
 	});
+	SetupAuiTheme();
 	mPopManager.AddPane(mBook, wxAuiPaneInfo().Name("Book").Caption("Book").CenterPane().Show());
 	mPopManager.Update();
 }

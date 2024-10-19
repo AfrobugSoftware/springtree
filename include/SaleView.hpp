@@ -55,6 +55,9 @@ namespace ab {
 		void Search(const std::string& str);
 		void SearchProducts(std::string&& sstring);
 	private:
+		void SetupAuiTheme();
+		void OnAuiThemeChange();
+
 		void OnDataItemSelected(wxDataViewEvent& evt);
 		bool CheckProduct(const ab::pproduct& product);
 		
@@ -102,6 +105,7 @@ namespace ab {
 
 			//MUST BE THE LAST ID
 			ID_SALE_VIEW,
+			ID_PAY_VIEW,
 		};
 
 		enum {
@@ -132,9 +136,13 @@ namespace ab {
 
 		//sale book management
 		void OnSaleNotebookClosed(wxAuiNotebookEvent& evt);
+		void OnSaleNotebookClosing(wxAuiNotebookEvent& evt);
+		void OnSaleNotebookChanged(wxAuiNotebookEvent& evt);
 
 		//signal
 		void OnSearchedProduct(const grape::sale_display& saleproduct);
+		void ClearTotals();
+		void UpdateTotals();
 
 		wxAuiManager mManager;
 		wxAuiNotebook* mSaleNotebook; //have different sales be different pages in the book

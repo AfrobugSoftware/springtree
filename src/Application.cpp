@@ -42,9 +42,6 @@ bool ab::Application::OnInit()
 		spdlog::set_default_logger(my_logger);
 
 
-		//mPharmacyManager.GetPharmacies();
-		//ab::DataModel<grape::product> mProductModel;
-
 		if (!LoadSettings()) {
 			ab::SetupWizard* wizard = new ab::SetupWizard(nullptr);
 			wizard->RunWizard(wizard->GetFirstPage());
@@ -59,8 +56,11 @@ bool ab::Application::OnInit()
 			}
 
 		}
+
+		//sign in from session
 		//did not sign in from session
-		if (mPharmacyManager.account.account_id.is_nil()) {
+		if (!SessionSignIn() && 
+			mPharmacyManager.account.account_id.is_nil()) {
 			ab::SignIn sin(nullptr);
 			if (sin.ShowModal() != wxID_OK) {
 				//NOT SIGNED IN 
@@ -69,6 +69,7 @@ bool ab::Application::OnInit()
 			}
 		}
 
+		SaveSettings(); 
 		mMainFrame = new ab::MainFrame(nullptr, wxID_ANY, wxDefaultPosition, wxSize(822, 762));
 		mMainFrame->Maximize();
 		mMainFrame->Show(true);
@@ -179,29 +180,14 @@ bool ab::Application::LoadSettings()
 		auto s = settings.find("session");
 		if (s != settings.end()) {
 			//only sign in from session if the user asked to remeber them
-			if (!static_cast<bool>((*s)["remember_me"])) return true;
+			if (!static_cast<bool>((*s)["remember_me"]))
+			{
+				mRememberMe = true;
+				mSessCred.session_id = boost::lexical_cast<boost::uuids::uuid>(static_cast<std::string>((*s)["id"]));
+				mSessCred.session_start_time = std::chrono::system_clock::time_point(
+					std::chrono::system_clock::duration(static_cast<std::uint64_t>((*s)["session_start_time"])));
 
-			grape::session_cred cred;
-			cred.session_id = boost::lexical_cast<boost::uuids::uuid>(static_cast<std::string>((*s)["id"]));
-			cred.session_start_time = std::chrono::system_clock::time_point(
-				std::chrono::system_clock::duration(static_cast<std::uint64_t>((*s)["session_start_time"])));
-
-			constexpr const size_t size = grape::serial::get_size(cred);
-			grape::session::request_type::body_type::value_type body(size, 0x00);
-			grape::serial::write(boost::asio::buffer(body), cred);
-
-			fut = sess->req(http::verb::post, "/account/signinfromsession", std::move(body));
-			resp = fut.get();
-			if (resp.result() != http::status::ok) {
-#ifdef _DEBUG
-				throw std::logic_error(ParseServerError(resp));
-#else 
-				return true;
-#endif
 			}
-
-			auto&& [acc, buf] = grape::serial::read<grape::account>(boost::asio::buffer(body));
-			mPharmacyManager.account = std::forward<grape::account>(acc);
 		}
 	}
 	catch (const std::exception& exp) {
@@ -224,6 +210,48 @@ bool ab::Application::SaveSettings()
 		spdlog::error(exp.what());
 		return false;
 	}
+	return true;
+}
+
+bool ab::Application::SessionSignIn()
+{
+	try {
+		wxBusyInfo wait("Signing into PharmaOffice\nPlease wait...");
+		if (!mRememberMe) return false;
+		const size_t size = grape::serial::get_size(mSessCred);
+		grape::session::request_type::body_type::value_type body(size, 0x00);
+		grape::serial::write(boost::asio::buffer(body), mSessCred);
+
+		auto fut = std::make_shared<grape::session>(mNetManager.io(), mNetManager.ssl())
+			->req(http::verb::post, "/account/signinfromsession", std::move(body));
+		auto resp = fut.get();
+		switch (resp.result())
+		{
+		case http::status::ok:
+		{
+			auto& data = resp.body();
+			if (data.empty()) throw std::invalid_argument("No data in buffer");
+			auto&& [acc, buf] = grape::serial::read<grape::account>(boost::asio::buffer(data));
+
+			auto& s = settings["session"];
+			s["id"] = boost::lexical_cast<std::string>(acc.session_id.value());
+			s["session_start_time"] = static_cast<std::uint64_t>(acc.session_start_time.value().time_since_epoch().count());
+			mPharmacyManager.account = std::forward<grape::account>(acc);
+
+		}
+			break;
+		case http::status::unauthorized:
+			return false;
+		default:
+			throw std::logic_error(ParseServerError(resp));
+
+		}
+	}
+	catch (const std::exception& exp) {
+		wxMessageBox(exp.what(), "FAILURE", wxICON_ERROR | wxOK);
+		return false;
+	}
+
 	return true;
 }
 
