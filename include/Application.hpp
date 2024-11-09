@@ -25,6 +25,7 @@
 #include "serialiser.h"
 #include "MainFrame.hpp"
 #include "PharmacyManager.hpp"
+#include "PrintManager.hpp"
 #include "ArtProvider.hpp"
 #include "Authentication.hpp"
 
@@ -41,6 +42,11 @@
 #include <format>
 #include <boost/lexical_cast.hpp>
 
+#define CHECK_PHARMACIST_PRIVILAGE() \
+	if(!wxGetApp().mPharmacyManager.account.privilage.test(static_cast<int>(grape::account_type::pharmacist))) { \
+		wxMessageBox("Account is not authorized", "Accounts", wxICON_ERROR | wxOK); \
+		return; \
+	}
 
 namespace js = nlohmann;
 namespace fs = std::filesystem;
@@ -96,8 +102,9 @@ namespace ab {
 		wxArrayString mSecurityQuestions;
 		wxArrayString mFormulationChoices;
 
-		ab::PharmacyManager mPharmacyManager;
-		pof::base::net_manager mNetManager;
+		ab::PrintManager        mPrintManager;
+		ab::PharmacyManager     mPharmacyManager;
+		pof::base::net_manager  mNetManager;
 		pof::base::task_manager mTaskManager;
 		std::string gVersion;
 
@@ -122,8 +129,27 @@ namespace ab {
 		//server helpers
 		std::string ParseServerError(const grape::session::response_type& resp);
 
+
+		//settings 
+		bool bShowPreviewOnSale = false;
+		bool bShowPrintPrompt   = true;
+		bool bShowPageSetup     = true;
+		int  mPaperType         = -1;
+
+		//receipt print configuration
+		wxFontData mReceiptFontSettings;
+		int leftMargin        = 2;
+		int topMargin         = 2;
+		int	bottomMargin      = 2;
+		int rightMargin       = 2;
+		int copies            = 1;
+		wxPaperSize paperSize = wxPAPER_A4;
+
+		void SaveReceiptPageSettings();
+		void LoadReceiptPageSettings();
+
 		//icon 
-		wxIcon mAppIcon;
+		wxIcon   mAppIcon;
 		js::json settings;
 	private:
 		bool LoadAppDetails();

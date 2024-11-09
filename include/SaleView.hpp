@@ -1,88 +1,14 @@
 #pragma once
-#include <wx/panel.h>
-#include <wx/simplebook.h>
 #include <wx/propgrid/propgrid.h>
 #include <wx/propgrid/manager.h>
 #include <wx/propgrid/advprops.h>
 #include <wx/splitter.h>
-#include <wx/dateevt.h>
-#include <wx/datectrl.h>
-#include <wx/dialog.h>
-#include <wx/aui/aui.h>
-#include <wx/dataview.h>
-#include <wx/toolbar.h>
-#include <wx/activityindicator.h>
-#include <wx/srchctrl.h>
 #include <wx/infobar.h>
-#include <wx/bmpbuttn.h>
-#include <wx/artprov.h>
-#include <wx/stattext.h>
-#include <wx/dcclient.h>
-#include <wx/popupwin.h>
 
-#include <functional>
-#include "Grape.hpp"
-#include "DataModel.hpp"
-#include "AuiTheme.hpp"
+#include "SearchPopup.hpp"
+#include "Packs.hpp"
 
-#include <boost/signals2/signal.hpp>
 namespace ab {
-
-	class SearchPopup : public wxPopupTransientWindow {
-	public:
-		boost::signals2::signal<void(const grape::sale_display&)> sSelectedSignal;
-		enum {
-			ID_DATA_VIEW = 10,
-		};
-
-		enum {
-			DATA_VIEW = 0,
-			NO_RESULT,
-			WAIT,
-			ERROR_PANE,
-		};
-
-		SearchPopup(wxWindow* parent);
-		virtual ~SearchPopup() = default;
-
-		void ChangeFont(const wxFont& font);
-
-		wxDataViewItem GetSelected() const { return mTable->GetSelection(); }
-		void SetNext(bool forward = true);
-		void SetActivated();
-
-		size_t GetItemCount() const { return mTableModel->size(); }
-		void Search(const std::string& str);
-		void SearchProducts(std::string&& sstring);
-	private:
-		void SetupAuiTheme();
-		void OnAuiThemeChange();
-
-		void OnDataItemSelected(wxDataViewEvent& evt);
-		bool CheckProduct(const ab::pproduct& product);
-		
-		wxPanel* mWaitPanel;
-		wxActivityIndicator* mActivity;
-
-		wxPanel* mErrorPanel;
-		wxStaticText* mErrorText;
-		wxButton* retry;
-
-
-		std::atomic_bool mSearching;
-		std::string mSearchString; //for retires
-		wxAuiManager mPopManager;
-		wxSimplebook* mBook = nullptr;
-		wxPanel* mNoResult = nullptr;
-		wxButton* mNoResultRetry = nullptr;
-		wxStaticText* mNoResultText = nullptr;
-		wxDataViewCtrl* mTable = nullptr;
-		ab::DataModel<ab::pproduct>* mTableModel = nullptr;
-		DECLARE_EVENT_TABLE()
-
-	};
-
-
 	class SaleView : public wxPanel {
 	public:
 		enum {
@@ -123,22 +49,29 @@ namespace ab {
 		void CreateToolbar();
 		void CreateView();
 		void CreateMainPane();
+		void PrintComplete(bool status, size_t work);
+		ab::DataModel<grape::sale_display>* GetCurrentModel() const;
+		grape::sale_receipt mReceipt;
 	private:
 		constexpr static size_t max_view = 10;
+		pof::base::currency mCurTotal;
 		void OnCheckOut(wxCommandEvent& evt);
 		void OnClear(wxCommandEvent& evt);
 		void OnSave(wxCommandEvent& evt);
 		void OnNewSale(wxCommandEvent& evt);
 		void OnOpenPacks(wxCommandEvent& evt);
-
+		void OnBarcodeSearch(wxCommandEvent& evt);
 		void OnProductSearch(wxCommandEvent& evt);
 		void OnProductSearchCleared(wxCommandEvent& evt);
+		void OnRemoveProduct(wxCommandEvent& evt);
 
 		//sale book management
 		void OnSaleNotebookClosed(wxAuiNotebookEvent& evt);
 		void OnSaleNotebookClosing(wxAuiNotebookEvent& evt);
 		void OnSaleNotebookChanged(wxAuiNotebookEvent& evt);
 
+		void OnEditStarted(wxDataViewEvent& evt);
+		void OnEditDone(wxDataViewEvent& evt);
 		//signal
 		void OnSearchedProduct(const grape::sale_display& saleproduct);
 		void ClearTotals();

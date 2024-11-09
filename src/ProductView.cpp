@@ -681,7 +681,7 @@ void ab::ProductView::OnContextMenu(wxDataViewEvent& evt)
 		dp = menu->Append(ID_DELETE_PRODUCT, std::format("Remove {:d} products", count), "Removes product from branch");
 	}
 
-	op->SetBitmap(wxArtProvider::GetBitmap("folder_open", wxART_OTHER, FromDIP(wxSize(16,16))));
+	op->SetBitmap(wxArtProvider::GetBitmap("file_open", wxART_OTHER, FromDIP(wxSize(16,16))));
 	dp->SetBitmap(wxArtProvider::GetBitmap("delete", wxART_OTHER, FromDIP(wxSize(16,16))));
 
 

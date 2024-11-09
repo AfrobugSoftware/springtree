@@ -3,24 +3,35 @@
 
 BEGIN_EVENT_TABLE(ab::SaleView, wxPanel)
 	EVT_BUTTON(ab::SaleView::ID_CHECKOUT, ab::SaleView::OnCheckOut)
-	EVT_BUTTON(ab::SaleView::ID_SAVE, ab::SaleView::OnSave)
-	EVT_BUTTON(ab::SaleView::ID_CLEAR, ab::SaleView::OnClear)
-	EVT_TOOL(ab::SaleView::ID_NEW_SALE, ab::SaleView::OnNewSale)
-	EVT_TOOL(ab::SaleView::ID_PACKS, ab::SaleView::OnOpenPacks)
+	EVT_BUTTON(ab::SaleView::ID_SAVE,     ab::SaleView::OnSave)
+	EVT_BUTTON(ab::SaleView::ID_CLEAR,    ab::SaleView::OnClear)
+	
+	EVT_TOOL(ab::SaleView::ID_NEW_SALE,       ab::SaleView::OnNewSale)
+	EVT_TOOL(ab::SaleView::ID_PACKS,          ab::SaleView::OnOpenPacks)
+	EVT_TOOL(ab::SaleView::ID_REMOVE_PRODUCT, ab::SaleView::OnRemoveProduct)
+	EVT_TOOL(ab::SaleView::ID_PACKS,          ab::SaleView::OnOpenPacks)
 
 	EVT_SEARCH(ab::SaleView::ID_PRODUCT_SEARCH_NAME, ab::SaleView::OnProductSearch)
-	EVT_TEXT(ab::SaleView::ID_PRODUCT_SEARCH_NAME, ab::SaleView::OnProductSearch)
-	EVT_SEARCH_CANCEL(ab::SaleView::ID_PRODUCT_SEARCH_NAME, ab::SaleView::OnProductSearchCleared)
-	EVT_AUINOTEBOOK_PAGE_CLOSE(ab::SaleView::ID_SALE_BOOK, ab::SaleView::OnSaleNotebookClosing)
-	EVT_AUINOTEBOOK_PAGE_CLOSED(ab::SaleView::ID_SALE_BOOK, ab::SaleView::OnSaleNotebookClosed)
+	EVT_TEXT(ab::SaleView::ID_PRODUCT_SEARCH_NAME,   ab::SaleView::OnProductSearch)
+	//EVT_TEXT(ab::SaleView::ID_PRODUCT_SCAN,          ab::SaleView::OnBarcodeSearch)
+	EVT_SEARCH(ab::SaleView::ID_PRODUCT_SCAN,        ab::SaleView::OnBarcodeSearch)
+
+	EVT_SEARCH_CANCEL(ab::SaleView::ID_PRODUCT_SEARCH_NAME,  ab::SaleView::OnProductSearchCleared)
+	EVT_AUINOTEBOOK_PAGE_CLOSE(ab::SaleView::ID_SALE_BOOK,   ab::SaleView::OnSaleNotebookClosing)
+	EVT_AUINOTEBOOK_PAGE_CLOSED(ab::SaleView::ID_SALE_BOOK,  ab::SaleView::OnSaleNotebookClosed)
 	EVT_AUINOTEBOOK_PAGE_CHANGED(ab::SaleView::ID_SALE_BOOK, ab::SaleView::OnSaleNotebookChanged)
 END_EVENT_TABLE()
 
+static auto funCur = [](const std::string& string) -> pof::base::currency
+{
+		auto pos = string.find_first_of(" ");
+		auto str = string.substr(pos);
+		auto i = std::ranges::remove_if(str,
+			[&](char c) ->bool {return c == ','; });
+		str.erase(i.begin(), i.end());
 
-BEGIN_EVENT_TABLE(ab::SearchPopup, wxPopupTransientWindow)
-	EVT_DATAVIEW_ITEM_ACTIVATED(ab::SearchPopup::ID_DATA_VIEW, ab::SearchPopup::OnDataItemSelected)
-END_EVENT_TABLE()
-
+		return pof::base::currency(str);
+};
 
 ab::SaleView::SaleView(wxWindow* parent, wxWindowID id, const wxPoint& position, const wxSize& size, long style)
 	: wxPanel(parent, id, position, size, style), mManager(this, ab::AuiTheme::AUIMGRSTYLE) {
@@ -29,6 +40,8 @@ ab::SaleView::SaleView(wxWindow* parent, wxWindowID id, const wxPoint& position,
 	CreateToolbar();
 	CreateMainPane();
 
+
+	wxGetApp().mPrintManager.printSig.connect(std::bind_front(&ab::SaleView::PrintComplete, this));
 	mManager.Update();
 }
 
@@ -84,6 +97,7 @@ void ab::SaleView::CreateToolbar()
 	mScanProductValue->SetValidator(wxTextValidator{ wxFILTER_DIGITS });
 	mScanProductValue->SetHint("Scan products");
 	mScanProductValue->ShowCancelButton(true);
+	mScanProductValue->Bind(wxEVT_SEARCH_CANCEL, [&](wxCommandEvent& evt) {});
 
 	mTopTools->AddControl(mScanProductValue);
 
@@ -158,9 +172,76 @@ void ab::SaleView::CreateView()
 		return;
 	}
 	auto view = 
-		mSaleView.emplace_back(new wxDataViewCtrl(mSaleNotebook, ID_SALE_VIEW + mSaleView.size(), wxDefaultPosition, wxDefaultSize, wxNO_BORDER | wxDV_HORIZ_RULES | wxDV_VERT_RULES | wxDV_ROW_LINES));
+		mSaleView.emplace_back(new wxDataViewCtrl(mSaleNotebook, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSIMPLE_BORDER | wxDV_HORIZ_RULES | wxDV_VERT_RULES | wxDV_ROW_LINES));
 	auto mod = new ab::DataModel<grape::sale_display>();
 	view->AssociateModel(mod);
+	view->Bind(wxEVT_DATAVIEW_ITEM_EDITING_STARTED, std::bind_front(&ab::SaleView::OnEditStarted, this));
+	view->Bind(wxEVT_DATAVIEW_ITEM_EDITING_DONE, std::bind_front(&ab::SaleView::OnEditDone, this));
+
+	ab::DataModel<grape::sale_display>::specialcol_t sp;
+	sp.second = [&](const wxVariant& var, int row, int col) -> bool {
+		wxBusyCursor cu;
+		std::int64_t count = var.GetLong();
+		if (count == 0) return false;
+
+		//check stock
+		try {
+			auto model = GetCurrentModel();
+			if (!model) throw std::runtime_error("failed to get model");
+			auto& v = model->GetRow(row);
+
+			if (v[1].GetLong() == count) return false; //no change
+
+			auto& app = wxGetApp();
+			grape::credentials cred{
+				app.mPharmacyManager.account.account_id,
+				app.mPharmacyManager.account.session_id.value(),
+				app.mPharmacyManager.pharmacy.id,
+				app.mPharmacyManager.branch.id
+			};
+			boost::fusion::vector<boost::uuids::uuid, std::int64_t> p;
+			boost::fusion::at_c<0>(p) = boost::lexical_cast<boost::uuids::uuid>(v[5].GetString().ToStdString());
+			boost::fusion::at_c<1>(p) = count;
+
+			constexpr const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(p);
+			grape::body_type body(size, 0x00);
+			auto buf1 = grape::serial::write(boost::asio::buffer(body), cred);
+			auto buf2 = grape::serial::write(buf1, p);
+
+			auto fut = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl())
+				->req(http::verb::get, "/product/stock/check", std::move(body));
+			grape::session::response_type resp;
+			{
+				wxBusyInfo wait("Checking stock\nPlease wait...");
+				resp = std::move(fut.get());
+			}
+			switch (resp.result())
+			{
+			case http::status::ok:
+				break;
+			case http::status::not_found:
+				wxMessageBox(std::format("{} has less stock than what is required", v[0].GetString().ToStdString()), "Sales", wxICON_WARNING | wxOK);
+				return false;
+			default:
+				throw std::logic_error(app.ParseServerError(resp));
+			}
+
+			v[1] = wxVariant(std::to_string(count));
+			auto cur = funCur(v[2].GetString().ToStdString());
+			cur *= static_cast<double>(count);
+			v[4] = fmt::format("{:cu}", cur);
+
+
+			UpdateTotals();
+			return true;
+		}
+		catch (const std::exception& exp) 
+		{
+			wxMessageBox(exp.what(), "Fatal error", wxICON_ERROR | wxOK);
+			return false;
+		}
+	};
+	mod->AddSpecialCol(std::move(sp), 1);
 	mod->DecRef();
 
 	view->AppendTextColumn(wxT("Product"),      0, wxDATAVIEW_CELL_INERT,    FromDIP(250), wxALIGN_CENTER);
@@ -186,11 +267,11 @@ void ab::SaleView::CreateMainPane()
 	std::tie(mEmpty, std::ignore,packButton) =
 		wxGetApp().CreateEmptyPanel(mBook, "Add product to begin sale",
 			"checkout_big");
-	packButton->SetLabel("Open packs");
+	packButton->SetLabel("New Sale");
 	packButton->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
-		OnOpenPacks(evt);
+		OnNewSale(evt);
 	});
-	wxImageList* imgList = new wxImageList(16, 16);
+	wxImageList* imgList = new wxImageList(FromDIP(16), FromDIP(16));
 	imgList->Add(wxArtProvider::GetBitmap("shopping_bag", wxART_OTHER, mSaleNotebook->FromDIP(wxSize(16, 16))));
 	mSaleNotebook->AssignImageList(imgList);
 
@@ -218,42 +299,34 @@ void ab::SaleView::CreateMainPane()
 	wxFont valueFont(wxFontInfo(valueFontSize).AntiAliased());
 	mQuantity = new wxStaticText(mTextOutPut, wxID_ANY, wxT("Quantity"), wxDefaultPosition, wxDefaultSize, 0);
 	mQuantity->Wrap(-1);
-	mQuantity->SetFont(wxFont(wxFontInfo(fontSize).Bold().AntiAliased()));
 	gSizer1->Add(mQuantity, 0, wxALIGN_RIGHT | wxALL, FromDIP(5));
 
 	mQuantityValue = new wxStaticText(mTextOutPut, wxID_ANY, wxT("0"), wxDefaultPosition, wxDefaultSize, 0);
 	mQuantityValue->Wrap(-1);
-	mQuantityValue->SetFont(valueFont);
 	gSizer1->Add(mQuantityValue, 0, wxALIGN_RIGHT | wxALL, FromDIP(5));
 
 	mExtQuantity = new wxStaticText(mTextOutPut, wxID_ANY, wxT("Ext. Quantity"), wxDefaultPosition, wxDefaultSize, 0);
 	mExtQuantity->Wrap(-1);
-	mExtQuantity->SetFont(wxFont(wxFontInfo(fontSize).Bold().AntiAliased()));
 	gSizer1->Add(mExtQuantity, 0, wxALIGN_RIGHT | wxALL, FromDIP(5));
 
 	mExtQuantityItem = new wxStaticText(mTextOutPut, wxID_ANY, wxT("0"), wxDefaultPosition, wxDefaultSize, 0);
 	mExtQuantityItem->Wrap(-1);
-	mExtQuantityItem->SetFont(valueFont);
 	gSizer1->Add(mExtQuantityItem, 0, wxALIGN_RIGHT | wxALL, FromDIP(5));
 
 	mDiscountAmount = new wxStaticText(mTextOutPut, wxID_ANY, wxT("Discount"), wxDefaultPosition, wxDefaultSize, 0);
 	mDiscountAmount->Wrap(-1);
-	mDiscountAmount->SetFont(wxFont(wxFontInfo(fontSize).Bold().AntiAliased()));
 	gSizer1->Add(mDiscountAmount, 0, wxALIGN_RIGHT | wxALL, FromDIP(5));
 
 	mDiscountValue = new wxStaticText(mTextOutPut, wxID_ANY, fmt::format("{:cu}", pof::base::currency{}), wxDefaultPosition, wxDefaultSize, 0);
 	mDiscountValue->Wrap(-1);
-	mDiscountValue->SetFont(valueFont);
 	gSizer1->Add(mDiscountValue, 0, wxALIGN_RIGHT | wxALL, FromDIP(5));
 
 	mTotalQuantity = new wxStaticText(mTextOutPut, wxID_ANY, wxT("Total Quantity"), wxDefaultPosition, wxDefaultSize, 0);
 	mTotalQuantity->Wrap(-1);
-	mTotalQuantity->SetFont(wxFont(wxFontInfo(fontSize).Bold().AntiAliased()));
 	gSizer1->Add(mTotalQuantity, 0, wxALIGN_RIGHT | wxALL, FromDIP(5));
 
 	mTotalQuantityValue = new wxStaticText(mTextOutPut, wxID_ANY, wxT("0"), wxDefaultPosition, wxDefaultSize, 0);
 	mTotalQuantityValue->Wrap(-1);
-	mTotalQuantityValue->SetFont(valueFont);
 	gSizer1->Add(mTotalQuantityValue, 0, wxALIGN_RIGHT | wxALL, FromDIP(5));
 
 
@@ -319,14 +392,131 @@ void ab::SaleView::CreateMainPane()
 	mManager.AddPane(mDataPane, wxAuiPaneInfo().Name("DataPane").CenterPane().Show());
 }
 
+void ab::SaleView::PrintComplete(bool status, size_t work)
+{
+	if (!status) {
+		//what to do ??
+		wxMessageBox("Printing not complete, try repriting receipt");
+		return;
+	}
+
+	switch (work)
+	{
+	case ab::PrintManager::RECEIPT:
+	{
+		auto model = GetCurrentModel();
+		if (!model) throw std::runtime_error("expected a model");
+
+		model->Clear();
+		ClearTotals();
+		mInfoBar->ShowMessage("Sale complete", wxICON_INFORMATION);
+	}
+		break;
+	case ab::PrintManager::REPRINT_RECEIPT:
+		break;
+	default:
+		break;
+	}
+}
+
+ab::DataModel<grape::sale_display>* ab::SaleView::GetCurrentModel() const
+{
+	int idx = mSaleNotebook->GetSelection();
+	if (idx == wxNOT_FOUND) return nullptr;
+
+	auto& view = mSaleView[idx];
+	auto model = dynamic_cast<ab::DataModel<grape::sale_display>*>(view->GetModel());
+
+	return model;
+}
+
 void ab::SaleView::OnCheckOut(wxCommandEvent& evt)
 {
+	int idx = mSaleNotebook->GetSelection();
+	if (idx == wxNOT_FOUND) return;
+
+	auto& view = mSaleView[idx];
+	auto model = dynamic_cast<ab::DataModel<grape::sale_display>*>(view->GetModel());
+	if (!model) return;
+	
+	try {
+		wxBusyInfo wait("Checking out sale\nPlease wait...");
+		auto& app = wxGetApp();
+		std::vector<grape::sale> mSales;
+		mSales.reserve(model->size());
+		for (auto& item : *model) {
+			auto& v = boost::fusion::at_c<2>(item);
+
+			auto& s       = mSales.emplace_back(grape::sale{});
+			s.pharmacy_id = app.mPharmacyManager.pharmacy.id;
+			s.branch_id   = app.mPharmacyManager.branch.id;
+			s.user_id     = app.mPharmacyManager.account.account_id;
+			s.id          = boost::uuids::nil_uuid();
+			s.product_id  = boost::lexical_cast<boost::uuids::uuid>(v[5].GetString());
+			s.sale_date   = std::chrono::system_clock::time_point{};
+			s.unit_cost   = funCur(v[6].GetString().ToStdString());
+			s.unit_price  = funCur(v[2].GetString().ToStdString());
+			s.discount    = funCur(v[3].GetString().ToStdString());
+			s.total       = funCur(v[4].GetString().ToStdString());
+			s.quantity    = v[1].GetLong();
+		}
+
+		grape::collection_type<grape::sale> collection;
+		boost::fusion::at_c<0>(collection) = std::move(mSales); //a copy;
+
+		//send sales
+		grape::credentials cred{
+			app.mPharmacyManager.account.account_id,
+			app.mPharmacyManager.account.session_id.value(),
+			app.mPharmacyManager.pharmacy.id,
+			app.mPharmacyManager.branch.id
+		};
+
+		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(collection);
+		grape::body_type body(size, 0x00);
+
+		auto buf  = grape::serial::write(boost::asio::buffer(body), cred);
+		auto buf2 = grape::serial::write(buf, collection);
+
+		auto fut = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl())
+			->req(http::verb::post, "/sale/checkout", std::move(body));
+		auto resp = fut.get();
+		switch(resp.result())
+		{
+		case http::status::ok:
+		{
+			auto& rbody = resp.body();
+			if (rbody.empty()) throw std::invalid_argument("Expected a body");
+			auto&& [sr, rbuf] = grape::serial::read<grape::sale_receipt>(boost::asio::buffer(rbody));
+
+			mReceipt = sr;
+			wxBusyInfo wait("Printing receipt\nPlease wait...");
+			app.mPrintManager.PrintReceipt(ab::PrintManager::RECEIPT);
+		}
+		break;
+		default:
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+
+	}
+	catch (const std::exception& exp)
+	{
+		wxMessageBox(exp.what(), "Failure in checkout", wxICON_ERROR | wxOK);
+		spdlog::error(exp.what());
+	}
 
 }
 
 void ab::SaleView::OnClear(wxCommandEvent& evt)
 {
+	int idx = mSaleNotebook->GetSelection();
+	if (idx == wxNOT_FOUND) return;
 
+	auto& view = mSaleView[idx];
+	auto model = dynamic_cast<ab::DataModel<grape::sale_display>*>(view->GetModel());
+	if (!model || model->empty()) return;
+
+	model->Clear();
 }
 
 void ab::SaleView::OnSave(wxCommandEvent& evt)
@@ -356,8 +546,9 @@ void ab::SaleView::OnSaleNotebookClosing(wxAuiNotebookEvent& evt)
 		evt.Veto();
 		return;
 	}
-
-	
+	else {
+		ClearTotals();
+	}
 }
 
 void ab::SaleView::OnSaleNotebookClosed(wxAuiNotebookEvent& evt)
@@ -378,8 +569,85 @@ void ab::SaleView::OnSaleNotebookChanged(wxAuiNotebookEvent& evt)
 	UpdateTotals();
 }
 
+void ab::SaleView::OnEditStarted(wxDataViewEvent& evt)
+{
+	auto item = evt.GetItem();
+	auto Col = evt.GetDataViewColumn();
+	auto Ctrl = Col->GetRenderer()->GetEditorCtrl();
+	wxIntegerValidator<size_t> val{ NULL };
+	val.SetMin(0);
+	val.SetMax(10000);
+	Ctrl->SetValidator(val);
+}
+
+void ab::SaleView::OnEditDone(wxDataViewEvent& evt)
+{
+}
+
 void ab::SaleView::OnOpenPacks(wxCommandEvent& evt)
 {
+	ab::Packs pack(nullptr, wxID_ANY, true);
+	if (pack.ShowModal() != wxID_OK) return;
+}
+
+void ab::SaleView::OnBarcodeSearch(wxCommandEvent& evt)
+{
+	auto str = evt.GetString().ToStdString();
+	if (str.empty()) return;
+	auto& app = wxGetApp();
+	try {
+		grape::credentials cred{
+			app.mPharmacyManager.account.account_id,
+			app.mPharmacyManager.account.session_id.value(),
+			app.mPharmacyManager.pharmacy.id,
+			app.mPharmacyManager.branch.id
+		};
+		grape::string_t v{ str };
+		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(v);
+		grape::body_type body(size, 0x00);
+
+		auto buf  = grape::serial::write(boost::asio::buffer(body), cred);
+		auto buf2 = grape::serial::write(buf, v);
+		auto fut  = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl())
+			->req(http::verb::get, "/product/search/barcode", std::move(body));
+		grape::session::response_type resp{};
+		{
+			wxBusyInfo wait("Searching for product\nPlease wait");
+			resp = std::move(fut.get());
+		}
+		switch (resp.result())
+		{
+		case http::status::ok:
+			break;
+		case http::status::not_found:
+			wxMessageBox(fmt::format("No product with barcode {} in store", str), "Sales", wxICON_WARNING | wxOK);
+			return;
+		default:
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+
+		//add product to the opened sale or open a new sale if no sale is opened,
+		auto& rbody = resp.body();
+		if (rbody.empty()) throw std::invalid_argument("no product returned");
+		auto&& [pp, rbuf] = grape::serial::read<ab::pproduct>(boost::asio::buffer(rbody));
+
+		if (!mSearchPopup->CheckProduct(pp)) return;
+		grape::sale_display sa;
+		sa.prod_id    = pp.id;
+		sa.name       = pp.name;
+		sa.quantity   = 1;
+		sa.unit_price = pp.unit_price;
+		sa.unit_cost  = pp.cost_price;
+		sa.discount   = pof::base::currency{};
+		sa.total      = pp.unit_price;
+
+		OnSearchedProduct(sa);
+		mScanProductValue->Clear();
+		mScanProductValue->SetFocus();
+	}
+	catch (const std::exception& exp) {
+		wxMessageBox(exp.what(), "Sales", wxICON_ERROR | wxOK);
+	}
 }
 
 void ab::SaleView::OnProductSearch(wxCommandEvent& evt)
@@ -406,6 +674,31 @@ void ab::SaleView::OnProductSearchCleared(wxCommandEvent& evt)
 	mProductNameValue->Clear();
 }
 
+void ab::SaleView::OnRemoveProduct(wxCommandEvent& evt)
+{
+	int idx = mSaleNotebook->GetSelection();
+	if (idx == wxNOT_FOUND)  {
+		wxMessageBox("No sale to remove from", "Sales", wxICON_WARNING | wxOK);
+		return;
+	}
+
+	auto& view = mSaleView[idx];
+	auto model = dynamic_cast<ab::DataModel<grape::sale_display>*>(view->GetModel());
+
+	auto item = view->GetSelection();
+	if (!item.IsOk()) {
+		wxMessageBox("No item selected", "Sales", wxICON_WARNING | wxOK);
+		return;
+	}
+	
+	int row = model->GetRow(item);
+	auto iter = std::next(model->begin(), row);
+	if (iter == model->end()) return;
+
+	model->Remove(iter);
+	UpdateTotals();
+}
+
 void ab::SaleView::OnSearchedProduct(const grape::sale_display& saleproduct)
 {
 	mProductNameValue->Clear();
@@ -421,6 +714,7 @@ void ab::SaleView::OnSearchedProduct(const grape::sale_display& saleproduct)
 	auto& view = mSaleView[idx];
 	auto model = dynamic_cast<ab::DataModel<grape::sale_display>*>(view->GetModel());
 	if (!model) return;
+	
 	auto str = boost::lexical_cast<std::string>(saleproduct.prod_id);
 	if (std::any_of(model->begin(), model->end(), [&](auto& item) -> bool {
 			auto& v = boost::fusion::at_c<2>(item);
@@ -428,6 +722,9 @@ void ab::SaleView::OnSearchedProduct(const grape::sale_display& saleproduct)
 			if (str == str2) {
 				std::int64_t count = v[1].GetLong();
 				v[1] = wxVariant(std::to_string(++count));
+				auto cur = funCur(v[2].GetString().ToStdString());
+				cur *= static_cast<double>(count);
+				v[4] = fmt::format("{:cu}", cur);
 				return true;
 			}
 			else return false;
@@ -461,22 +758,15 @@ void ab::SaleView::UpdateTotals()
 
 	auto& view = mSaleView[idx];
 	auto model = dynamic_cast<ab::DataModel<grape::sale_display>*>(view->GetModel());
-	if (!model || model->empty()) return;
+	if (!model || model->empty()) {
+		ClearTotals();
+		return;
+	}
 
 	std::uint64_t quan = 0;
 	pof::base::currency total{};
 	pof::base::currency totalDiscount{};
-	auto funCur = [&](const std::string& string) -> pof::base::currency
-		{
-			auto pos = string.find_first_of(" ");
-			auto str = string.substr(pos);
-			auto i = std::ranges::remove_if(str,
-				[&](char c) ->bool {return c == ','; });
-			str.erase(i.begin(), i.end());
-
-			return pof::base::currency(str);
-		};
-
+	
 	for (auto& item : *model) {
 		const auto& v = boost::fusion::at_c<2>(item);
 		quan += v[1].GetLong();
@@ -495,239 +785,3 @@ void ab::SaleView::UpdateTotals()
 	mSalePaymentButtonsPane->Layout();
 }
 
-void ab::SearchPopup::SetNext(bool forward)
-{
-	auto item = GetSelected();
-	if (!item.IsOk()) return;
-
-	size_t i = mTableModel->GetRow(item);
-	if (forward) i++;
-	else         i--;
-
-	const size_t size = mTableModel->size();
-	i = std::clamp(i, 0ull, (size - 1));
-	
-	mTable->EnsureVisible(ab::DataModel<ab::pproduct>::ToDataViewItem(i));
-	mTable->Select(ab::DataModel<ab::pproduct>::ToDataViewItem(i));
-}
-
-void ab::SearchPopup::SetActivated()
-{
-	auto item = GetSelected();
-	if (!item.IsOk()) return;
-
-	Dismiss();
-
-	const int r = mTableModel->GetRow(item);
-	auto row = ab::make_struct<ab::pproduct>(mTableModel->GetRow(r));
-	if (!CheckProduct(row)) return;
-	grape::sale_display sa;
-	sa.prod_id    = row.id;
-	sa.name       = row.name;
-	sa.quantity   = 1;
-	sa.unit_price = row.unit_price;
-	sa.discount   = pof::base::currency{};
-	sa.total      = row.unit_price;
-
-	sSelectedSignal(sa);
-}
-
-void ab::SearchPopup::Search(const std::string& str)
-{
-	if (!mSearching) {
-		if (std::ranges::all_of(str, [](char s) {return std::isspace(s); }))
-			return;
-		mBook->SetSelection(WAIT);
-		mActivity->Start();
-		mSearchString = str;
-		boost::asio::post(wxGetApp().mTaskManager.tp(),
-			std::bind_front(&ab::SearchPopup::SearchProducts, this, mSearchString));
-	}
-}
-
-void ab::SearchPopup::SearchProducts(std::string&& sstring)
-{
-	mSearching = true;
-	try {
-		auto& app = wxGetApp();
-		grape::credentials cred{
-			app.mPharmacyManager.account.account_id,
-			app.mPharmacyManager.account.session_id.value(),
-			app.mPharmacyManager.pharmacy.id,
-			app.mPharmacyManager.branch.id
-		};
-		boost::trim(sstring);
-		boost::to_lower(sstring);
-		boost::fusion::vector<std::uint32_t, std::string> searchT{ 0ul, std::forward<std::string>(sstring) };
-	
-		
-		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(searchT);
-		grape::session::request_type::body_type::value_type body(size, 0x00);
-		auto buf = grape::serial::write(boost::asio::buffer(body), cred);
-		grape::serial::write(buf, searchT);
-		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
-
-		auto fut = sess->req(http::verb::get, "/product/search", std::move(body));
-		
-		auto resp = fut.get();
-		if (resp.result() == http::status::not_found) {
-			mBook->SetSelection(NO_RESULT);
-			mSearching = false;
-			return;
-		}
-
-		auto& b = resp.body();
-		if (b.empty()) throw std::logic_error("no data receievd");
-		auto&& [col, buf2] = grape::serial::read<grape::collection_type<ab::pproduct>>(boost::asio::buffer(b));
-		auto& c = boost::fusion::at_c<0>(col);
-
-		mTable->Freeze();
-		mTableModel->Reload(c, 0, c.size(), c.size());
-
-		mTable->Thaw();
-
-		mActivity->Stop();
-		mBook->SetSelection(DATA_VIEW);
-
-		mSearching = false;
-
-	}
-	catch (const std::exception& exp) {
-		spdlog::error(std::format("{} :{}", std::source_location::current(), exp.what()));
-		mErrorText->SetLabel(exp.what());
-		mBook->SetSelection(ERROR_PANE);
-		mSearching = false;
-	}
-}
-
-void ab::SearchPopup::SetupAuiTheme()
-{
-	auto auiart = mPopManager.GetArtProvider();
-	ab::AuiTheme::Update(auiart);
-	ab::AuiTheme::Register(std::bind_front(&ab::SearchPopup::OnAuiThemeChange, this));
-}
-
-void ab::SearchPopup::OnAuiThemeChange()
-{
-	auto auiart = mPopManager.GetArtProvider();
-	ab::AuiTheme::Update(auiart);
-}
-
-void ab::SearchPopup::OnDataItemSelected(wxDataViewEvent& evt)
-{
-	auto item = evt.GetItem();
-	if (!item.IsOk()) return;
-	Dismiss();
-
-	const int r = mTableModel->GetRow(item);
-	auto row    = ab::make_struct<ab::pproduct>(mTableModel->GetRow(r));
-	if (!CheckProduct(row)) return;
-	grape::sale_display sa;
-	sa.prod_id    = row.id;
-	sa.name       = row.name;
-	sa.quantity   = 1;
-	sa.unit_price = row.unit_price;
-	sa.discount   = pof::base::currency{};
-	sa.total      = row.unit_price;
-
-	sSelectedSignal(sa);
-}
-
-bool ab::SearchPopup::CheckProduct(const ab::pproduct& product)
-{
-	try {
-		if (product.stock_count <= 0) {
-			wxMessageBox(std::format("{} is out of stock, add stock to sell", product.name), "Sales", wxICON_WARNING | wxOK);
-			return false;
-		}
-
-		if (product.cls == "POM" ||
-			product.cls == "CONTROLLED") {
-			wxMessageBox(std::format("{} requires a prescriprion to sell", product.name), "Sales", wxICON_WARNING | wxOK);
-			return false;
-		}
-		auto& app = wxGetApp();
-		grape::credentials cred{
-			app.mPharmacyManager.account.account_id,
-			app.mPharmacyManager.account.session_id.value(),
-			app.mPharmacyManager.pharmacy.id,
-			app.mPharmacyManager.branch.id
-		};
-		grape::uid_t p;
-		boost::fusion::at_c<0>(p) = product.id;
-		constexpr const size_t size = grape::serial::get_size(cred) +
-			grape::serial::get_size(p);
-		grape::body_type body(size, 0x00);
-		auto buf1 = grape::serial::write(boost::asio::buffer(body), cred);
-		auto buf2 = grape::serial::write(buf1, p);
-
-		auto fut = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl())
-		->req(http::verb::get, "/product/expired/check", std::move(body));
-		grape::session::response_type resp;
-		{
-			wxBusyInfo wait("Checking expired\nPlease wait...");
-			resp = std::move(fut.get());
-		}
-		switch (resp.result())
-		{
-		case http::status::ok:
-			wxMessageBox(std::format("{} is expired", product.name), "Sales", wxICON_WARNING | wxOK);
-			return false;
-		case http::status::not_found:
-			break;
-		default:
-			throw std::logic_error(app.ParseServerError(resp));
-		}
-	}
-	catch (const std::exception& exp) {
-		wxMessageBox(exp.what(), "Sales", wxICON_ERROR | wxOK);
-		return false;
-	}
-	return true;
-}
-
-ab::SearchPopup::SearchPopup(wxWindow* parent)
-	: wxPopupTransientWindow(parent, wxBORDER_NONE), mPopManager(this, ab::AuiTheme::AUIMGRSTYLE), mSearching{false} {
-	auto& app = wxGetApp();
-	mBook = new wxSimplebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSIMPLE_BORDER | wxTAB_TRAVERSAL);
-	mTableModel = new ab::DataModel<ab::pproduct>();
-	mTable = new wxDataViewCtrl(mBook, 
-		ID_DATA_VIEW, wxDefaultPosition, wxDefaultSize, wxNO_BORDER | wxDV_ROW_LINES | wxDV_HORIZ_RULES);
-	mTable->AssociateModel(mTableModel);
-	mTableModel->DecRef();
-
-	mTable->AppendTextColumn(wxT("Name"), 3, wxDATAVIEW_CELL_INERT, FromDIP(150), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_REORDERABLE);
-	mTable->AppendTextColumn(wxT("Strength"), 1111, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mTable->AppendTextColumn(wxT("Formulation"), 6, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mTable->AppendTextColumn(wxT("Package Size"), 13, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mTable->AppendTextColumn(wxT("Stock Count"), 14, wxDATAVIEW_CELL_INERT, FromDIP(100), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_REORDERABLE);
-	mTable->AppendTextColumn(wxT("Unit Price"), 11, wxDATAVIEW_CELL_INERT, FromDIP(70), wxALIGN_LEFT, wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-
-	mBook->AddPage(mTable, "View", false);
-	
-	std::tie(mNoResult, std::ignore, mNoResultRetry) = app.CreateEmptyPanel(mBook, "No such product in store", wxART_WARNING, wxSize(48, 48), wxART_MESSAGE_BOX);
-	mNoResult->SetBackgroundColour(*wxWHITE);
-	mBook->AddPage(mNoResult, "No result", false);
-	
-	std::tie(mWaitPanel, mActivity) = app.CreateWaitPanel(mBook, "Please wait..");
-	mWaitPanel->SetBackgroundColour(*wxWHITE);
-	mBook->AddPage(mWaitPanel, "Wait", true);
-	
-
-
-	std::tie(mErrorPanel, mErrorText, retry) = app.CreateEmptyPanel(mBook, "No connection", wxART_ERROR, wxSize(48, 48), wxART_MESSAGE_BOX);
-	mBook->AddPage(mErrorPanel, "Error", false);
-	retry->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
-		mBook->SetSelection(WAIT);
-		boost::asio::post(wxGetApp().mTaskManager.tp(),
-			std::bind_front(&ab::SearchPopup::SearchProducts, this, mSearchString));
-	});
-	SetupAuiTheme();
-	mPopManager.AddPane(mBook, wxAuiPaneInfo().Name("Book").Caption("Book").CenterPane().Show());
-	mPopManager.Update();
-}
-
-void ab::SearchPopup::ChangeFont(const wxFont& font)
-{
-	mTable->SetFont(font);
-}

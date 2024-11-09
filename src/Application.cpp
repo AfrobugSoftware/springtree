@@ -136,6 +136,8 @@ bool ab::Application::LoadSettings()
 		//put a Busy wait here
 		
 		settings = js::json::parse(os.str());
+		LoadReceiptPageSettings();
+
 		boost::uuids::uuid id = boost::lexical_cast<boost::uuids::uuid>(static_cast<std::string>(settings["pharmacy_id"]));
 
 		//update to getting pharmacy
@@ -200,6 +202,9 @@ bool ab::Application::LoadSettings()
 bool ab::Application::SaveSettings()
 {
 	try {
+		SaveReceiptPageSettings();
+
+
 		auto fpath = fs::current_path() / ".data"s / "settings.json";
 		std::fstream file(fpath, std::ios::out);
 		if (!file.is_open()) throw std::logic_error("failed to create settings file");
@@ -440,6 +445,84 @@ std::string ab::Application::ParseServerError(const grape::session::response_typ
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());
 		return ""s;
+	}
+}
+
+void ab::Application::SaveReceiptPageSettings()
+{
+	auto rset = settings.find("receiptPage");
+	if (rset == settings.end()) {
+		js::json rp = js::json::object();
+		rp["leftMargin"]   = leftMargin;
+		rp["rightMargin"]  = rightMargin;
+		rp["topMargin"]    = topMargin;
+		rp["bottomMargin"] = bottomMargin;
+		rp["paperSize"]    = static_cast<int>(paperSize);
+
+		wxFont f = mReceiptFontSettings.GetChosenFont();
+		if (f.IsOk()) {
+			js::json rpFontSettings = js::json::object();
+			rpFontSettings["fontFace"]   = f.GetFaceName();
+			rpFontSettings["pointSize"]  = f.GetPointSize();
+			rpFontSettings["fontStyle"]  = static_cast<int>(f.GetStyle());
+			rpFontSettings["fontFamily"] = static_cast<int>(f.GetFamily());
+
+			rp["fontSettings"] = rpFontSettings;
+		}
+		settings["receiptPage"] = rp;
+	}
+	else {
+		js::json& rp = *rset;
+		rp["leftMargin"]   = leftMargin;
+		rp["rightMargin"]  = rightMargin;
+		rp["topMargin"]    = topMargin;
+		rp["bottomMargin"] = bottomMargin;
+		rp["paperSize"]    = static_cast<int>(paperSize);
+
+		wxFont f = mReceiptFontSettings.GetChosenFont();
+		auto irpfs = rp.find("fontSettings");
+		if (irpfs != rp.end() && f.IsOk())
+		{
+			js::json& rpFontSettings     = *irpfs;
+			rpFontSettings["fontFace"]   = f.GetFaceName();
+			rpFontSettings["pointSize"]  = f.GetPointSize();
+			rpFontSettings["fontStyle"]  = static_cast<int>(f.GetStyle());
+			rpFontSettings["fontFamily"] = static_cast<int>(f.GetFamily());
+		}
+		else if (f.IsOk())
+		{
+			js::json rpFontSettings = js::json::object();
+			rpFontSettings["fontFace"]   = f.GetFaceName();
+			rpFontSettings["pointSize"]  = f.GetPointSize();
+			rpFontSettings["fontStyle"]  = static_cast<int>(f.GetStyle());
+			rpFontSettings["fontFamily"] = static_cast<int>(f.GetFamily());
+
+			rp["fontSettings"] = rpFontSettings;
+		}
+	}
+}
+
+void ab::Application::LoadReceiptPageSettings()
+{
+	auto rset = settings.find("receiptPage");
+	if (rset == settings.end()) return; //nothing to load
+	js::json& rp = *rset;
+	leftMargin   = rp["leftMargin"];
+	rightMargin  = rp["rightMargin"];
+	topMargin    = rp["topMargin"];
+	bottomMargin = rp["topMargin"];
+	paperSize    = static_cast<wxPaperSize>(rp["paperSize"]);
+
+	auto irpfs = rp.find("fontSettings");
+	if (irpfs != rp.end())
+	{
+		wxFont f;
+		js::json& rpFontSettings = *irpfs;
+		f.SetFaceName(static_cast<std::string>(rpFontSettings["fontFace"]));
+		f.SetPointSize(static_cast<int>(rpFontSettings["pointSize"]));
+		f.SetFamily(static_cast<int>(rpFontSettings["fontFamily"]));
+		f.SetStyle(static_cast<int>(rpFontSettings["fontStyle"]));
+		mReceiptFontSettings.SetChosenFont(f);
 	}
 }
 

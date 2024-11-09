@@ -54,6 +54,8 @@ namespace ab {
 		void CreateWelcomePage();
 		void CreateSelectList();
 		void CreateImageList();
+
+		constexpr ab::SaleView* GetSaleView() { return mSaleView; }
 	private:
 		void OnWelcomePageSelect(wxListEvent& evt);
 		void OnAbout(wxCommandEvent& evt);

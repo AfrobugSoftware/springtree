@@ -230,8 +230,16 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(boost::uuids::uuid, pharmacy_id)
 	(boost::uuids::uuid, branch_id)
 	(boost::uuids::uuid, id)
-	(boost::uuids::uuid, product_id)
+	(std::string, name)
+	(std::int64_t, quantity)
+	(pof::base::currency, cost)
+)
 
+//pack products
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape), pack_product,
+	(boost::uuids::uuid, pack_id)
+	(boost::uuids::uuid, product_id)
 )
 
 //pharma products
@@ -436,9 +444,9 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(std::chrono::system_clock::time_point, sale_date)
 	(pof::base::currency, unit_cost)
 	(pof::base::currency, unit_price)
+	(pof::base::currency, discount)
 	(pof::base::currency, total)
 	(std::uint32_t, quantity)
-	(pof::base::currency, discount)
 	(std::string, payment_method)
 	(std::string, payment_addinfo)
 	(std::string, product_label)
@@ -454,8 +462,16 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(pof::base::currency, discount)
 	(pof::base::currency, total)
 	(boost::uuids::uuid, prod_id)
+	(pof::base::currency, unit_cost)
 )
 
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape), sale_receipt,
+	(boost::uuids::uuid, id)
+	(std::chrono::system_clock::time_point, date)
+	(pof::base::currency, total)
+	(int64_t, quantity)
+)
 
 BOOST_FUSION_DEFINE_STRUCT(
 	(grape), sale_history,

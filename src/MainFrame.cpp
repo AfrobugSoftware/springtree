@@ -149,9 +149,9 @@ void ab::MainFrame::CreateWelcomePage()
 
 	bSizer9->Add(0, 0, 1, wxEXPAND, FromDIP(5));
 
-	auto today = std::chrono::system_clock::now();
-	std::string todayTime = std::format("{:%H:%M}", today);
-	std::chrono::sys_days dt = std::chrono::time_point_cast<std::chrono::sys_days::duration>(today);
+	auto today = std::chrono::zoned_time(std::chrono::current_zone()->name(), std::chrono::system_clock::now());
+	std::string todayTime = std::format("{:%H:%M}", today.get_local_time());
+	std::chrono::sys_days dt = std::chrono::time_point_cast<std::chrono::sys_days::duration>(today.get_sys_time());
 	std::chrono::year_month_day ymd{ dt };
 	std::chrono::weekday wk{ dt };
 

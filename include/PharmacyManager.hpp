@@ -25,6 +25,9 @@ namespace ab {
 
 		std::string GetAccountTypeAsString() const;
 		std::string GetPharmacyTypeAsString() const;
+		std::string GetAddressAsString() const;
+		std::string GetContactAsString() const;
+
 
 		grape::credentials mSessionCredentials;
 		grape::address address;

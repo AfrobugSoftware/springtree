@@ -338,6 +338,7 @@ void ab::ProductInfo::OnCacheHint(wxDataViewEvent& evt)
 
 void ab::ProductInfo::OnSave(wxCommandEvent& evt)
 {
+	CHECK_PHARMACIST_PRIVILAGE();
 	auto& app = wxGetApp();
 	if (mUpdateSet.none() && mUpdatePharmaSet.none()) return;
 
@@ -354,17 +355,17 @@ void ab::ProductInfo::OnSave(wxCommandEvent& evt)
 		grape::session::response_type resp;
 		if (mUpdateSet.any()) {
 			grape::product product;
-			product.id = mSelectedProduct.id;
-			product.name = mSelectedProduct.name;
+			product.id           = mSelectedProduct.id;
+			product.name         = mSelectedProduct.name;
 			product.generic_name = mSelectedProduct.generic_name;
-			product.class_ = mSelectedProduct.cls;
-			product.formulation = mSelectedProduct.formulation;
-			product.strength = mSelectedProduct.strength;
-			product.usage_info = mSelectedProduct.usage_info;
-			product.indications = mSelectedProduct.indications;
+			product.class_       = mSelectedProduct.cls;
+			product.formulation  = mSelectedProduct.formulation;
+			product.strength     = mSelectedProduct.strength;
+			product.usage_info   = mSelectedProduct.usage_info;
+			product.indications  = mSelectedProduct.indications;
 			product.package_size = mSelectedProduct.package_size;
-			product.sideeffects = mSelectedProduct.sideeffects;
-			product.barcode = mSelectedProduct.barcode;
+			product.sideeffects  = mSelectedProduct.sideeffects;
+			product.barcode      = mSelectedProduct.barcode;
 			grape::bits<grape::product> bitset{ mUpdateSet };
 			grape::uid_t fid{ mSelectedProduct.formulary_id };
 			const size_t size = grape::serial::get_size(cred) +

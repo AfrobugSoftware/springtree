@@ -233,3 +233,24 @@ std::string ab::PharmacyManager::GetPharmacyTypeAsString() const
 	};
 	return std::string(sPharamcyTypes[static_cast<std::underlying_type_t<grape::branch_type>>(branch.type)]);
 }
+
+std::string ab::PharmacyManager::GetAddressAsString() const
+{
+	auto str =  std::format("{} {} {},{}",
+		address.num, address.street, address.state,
+		address.country);
+	return str;
+}
+
+std::string ab::PharmacyManager::GetContactAsString() const
+{
+	js::json info = js::json::parse(pharmacy.info);
+	auto i = info.find("contact");
+	if (i != info.end()) {
+		js::json& c = *i;
+		return std::format("Email: {} PhonoNo: {}",
+				static_cast<std::string>(c["email"]),
+				static_cast<std::string>(c["phone"]));
+	}
+	else return {};
+}

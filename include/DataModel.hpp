@@ -26,7 +26,10 @@ namespace ab {
 			}
 			else if constexpr (std::is_same_v<std::chrono::system_clock::time_point, arg_type>)
 			{
-				auto tt = std::chrono::system_clock::to_time_t(v);
+				auto n = std::chrono::zoned_time(std::chrono::current_zone()->name(), v);
+				std::chrono::sys_days dt = std::chrono::time_point_cast<std::chrono::sys_days::duration>(n.get_sys_time());
+
+				auto tt = std::chrono::system_clock::to_time_t(dt);
 				ret[i] = wxVariant(wxDateTime(tt));
 			}
 			else if constexpr (std::is_enum_v<arg_type>)
@@ -119,6 +122,7 @@ namespace ab {
 		>>
 	{
 	public:
+		using fusion_t = T;
 		using row_t = boost::fusion::vector<
 			std::bitset<boost::mpl::size<T>::value>,
 			std::array<wxDataViewItemAttr, boost::mpl::size<T>::value>,
@@ -216,12 +220,12 @@ namespace ab {
 				auto& f = iter->second.first;
 				if (f) {
 					f(variant, row, col);
+					return;
 				}
-				return;
 			}
 			
 			std::unique_lock<std::mutex> lk(mMutex);
-			if (col > col_count || vec_base::empty()) return;
+			if (col >= col_count || vec_base::empty()) return;
 			auto& r = boost::fusion::at_c<2>((*this)[Map(row)]);
 			variant = r[col];
 		}
@@ -235,11 +239,10 @@ namespace ab {
 					if (f) {
 						return f(variant, row, col);
 					}
-					return false;
 				}
 
 				std::unique_lock<std::mutex> lock(mMutex);
-				if (col > col_count || vec_base::empty()) return false;
+				if (col >= col_count || vec_base::empty()) return false;
 				auto& r = boost::fusion::at_c<2>((*this)[Map(row)]); 
 				r[col] = variant;
 				return true;
@@ -259,6 +262,19 @@ namespace ab {
 			boost::fusion::at_c<2>(v) = value;
 			vec_base::push_back(std::move(v));
 			RowAppended();
+		}
+
+		void Add(T&& str) {
+			typename vec_base::value_type v{};
+			boost::fusion::at_c<2>(v) = ab::make_variant<T>(std::forward<T>(str));
+			vec_base::push_back(std::move(v));
+			RowAppended();
+		}
+
+		void Remove(vec_base::const_iterator iter) {
+			const int row = std::distance(vec_base::cbegin(), iter);
+			vec_base::erase(iter);
+			RowDeleted(row);
 		}
 	private:
 		constexpr size_t Map(size_t idx) const {
