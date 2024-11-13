@@ -11,6 +11,8 @@ BEGIN_EVENT_TABLE(ab::SupplierView, wxPanel)
 	EVT_TOOL(ab::SupplierView::ID_INVOICE_TOOL, ab::SupplierView::OnAddInvoice)
 	EVT_TOOL(ab::SupplierView::ID_BACK, ab::SupplierView::OnBack)
 	EVT_TOOL(ab::SupplierView::ID_SUPPLIER_BACK, ab::SupplierView::OnBack)
+	EVT_TOOL(ab::SupplierView::ID_ADD_SUPPLIER,  ab::SupplierView::OnAddSupplier)
+	EVT_TOOL(ab::SupplierView::ID_CREATE_INVOICE, ab::SupplierView::OnAddInvoice)
 END_EVENT_TABLE()
 
 ab::SupplierView::SupplierView(wxWindow* win, wxWindowID id, const wxPoint& position, const wxSize& size, long style)
@@ -43,6 +45,13 @@ void ab::SupplierView::Suppliers()
 	boost::asio::post(app.mTaskManager.tp(),
 		std::bind_front(&ab::SupplierView::LoadSuppliers, this, 0, 100));
 	SwitchTool(SUPPLIER_VIEW);
+}
+
+void ab::SupplierView::UnLoad()
+{
+	mSupplierModel->Clear();
+	mInvoiceModel->Clear();
+	mInvoiceProductModel->Clear();
 }
 
 void ab::SupplierView::OnBack(wxCommandEvent& evt)
@@ -122,7 +131,7 @@ void ab::SupplierView::OnAddSupplier(wxCommandEvent& evt)
 		switch (resp.result())
 		{
 		case http::status::ok:
-			return;
+			break;
 		default:
 			throw std::logic_error(app.ParseServerError(resp));
 		}
@@ -197,7 +206,7 @@ void ab::SupplierView::OnAddInvoice(wxCommandEvent& evt)
 		switch (resp.result())
 		{
 		case http::status::ok:
-			return;
+			break;
 		case http::status::not_found:
 			break;
 		default:
@@ -517,22 +526,23 @@ void ab::SupplierView::CreatePanels()
 {
 	auto& app = wxGetApp();
 	wxButton* addButton = nullptr;
-	std::tie(mEmpty, std::ignore, addButton) = app.CreateEmptyPanel(mBook, "No supplier in pharmacy");
+	std::tie(mEmpty, std::ignore, addButton) = app.CreateEmptyPanel(mBook, "No supplier in pharmacy", "suppliers");
 	addButton->SetLabelText("Add supplier");
 	addButton->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
 		OnAddSupplier(evt);
 	});
 
-	std::tie(mEmptyInvoice, std::ignore, addButton) = app.CreateEmptyPanel(mBook, "No invoice in supplier");
+	std::tie(mEmptyInvoice, std::ignore, addButton) = app.CreateEmptyPanel(mBook, "No invoice in supplier", "invoices");
 	addButton->SetLabelText("Add Invoice");
 	addButton->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
 		OnAddInvoice(evt);
 	});
 
-	std::tie(mEmptyInvoiceProduct, std::ignore, addButton) = app.CreateEmptyPanel(mBook, "No product in invoice");
+	std::tie(mEmptyInvoiceProduct, std::ignore, addButton) = app.CreateEmptyPanel(mBook, "No product in invoice", wxART_WARNING, wxSize(48,48), wxART_MESSAGE_BOX);
 	addButton->SetLabelText("Add Product");
 	addButton->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
-
+		wxMessageBox("Search for product to add", "Supplier", wxICON_WARNING | wxOK);
+		mInvoiceProductSearch->SetFocus();
 	});
 
 	std::tie(mWaitPanel, mWaitIndicator) = app.CreateWaitPanel(mBook, "Please wait...");
@@ -558,9 +568,9 @@ void ab::SupplierView::CreateViews()
 	mSupplierModel->DecRef();
 
 
-	mSupplierView->AppendTextColumn("Supplier Name", 0, wxDATAVIEW_CELL_INERT, FromDIP(450), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mSupplierView->AppendTextColumn("Date created",  1, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mSupplierView->AppendTextColumn("Date modified", 2, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mSupplierView->AppendTextColumn("Supplier Name", 3, wxDATAVIEW_CELL_INERT, FromDIP(450), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mSupplierView->AppendTextColumn("Date created",  4, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mSupplierView->AppendTextColumn("Date modified", 5, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
 
 	mBook->AddPage(mSupplierView, "View", false);
 
@@ -703,12 +713,16 @@ void ab::SupplierView::LoadSuppliers(int start, int end)
 
 		auto&& [supps, rbuf] = grape::serial::read<
 			grape::collection_type<grape::supplier>>(boost::asio::buffer(rbody));
+		mSupplierView->Freeze();
+		mSupplierModel->Reload(boost::fusion::at_c<0>(supps), start , start + end, 100);
+		mSupplierView->Thaw();
+
 		mWaitIndicator->Stop();
-		mSupplierModel->Reload(boost::fusion::at_c<0>(supps), start, end, start + end);
+		mBook->SetSelection(SUPPLIER_VIEW);
 
 	}
 	catch (const std::exception& exp) {
-		mServerErrorText->SetLabel(std::format("failed to loaded invoice\n{}", exp.what()));
+		mServerErrorText->SetLabel(std::format("failed to load supplier\n{}", exp.what()));
 		mBook->SetSelection(SERVER_ERROR);
 		mServerErrorPanel->Layout();
 	}

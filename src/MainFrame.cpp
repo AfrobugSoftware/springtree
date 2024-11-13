@@ -10,9 +10,11 @@ ab::MainFrame::MainFrame()
 }
 
 ab::MainFrame::MainFrame(wxWindow* parent, wxWindowID id, const wxPoint& position, const wxSize& size)
- : wxFrame(parent, id, "PharmaOffice - Enterprice", position, size), mManager(this, ab::AuiTheme::AUIMGRSTYLE){
+ : wxFrame(parent, id, "PharmaOffice - Enterprise", position, size), mManager(this, ab::AuiTheme::AUIMGRSTYLE){
 	SetSize(FromDIP(size));
 	SetBackgroundColour(*wxWHITE);
+	SetDoubleBuffered(true);
+
 	ClearBackground();
 
 	SetupAuiTheme();

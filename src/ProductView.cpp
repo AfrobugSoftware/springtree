@@ -194,15 +194,18 @@ void ab::ProductView::CreateProductInfo()
 {
 	mProductInfo = new ab::ProductInfo(mBook, wxID_ANY);
 	mProductInfo->mOnBack = [&]() {
+		Freeze();
 		auto& toptool = mManager.GetPane("TopToolBar");
 		auto& bottoll = mManager.GetPane("BottomToolBar");
 		if (!toptool.IsOk() || !bottoll.IsOk()) return;
 		toptool.Show(true);
 		bottoll.Show(true);
+		mManager.Update();
+
 
 		mProductInfo->UnLoad();
 		mBook->SetSelection(VIEW);
-		mManager.Update();
+		Thaw();
 	};
 	mBook->AddPage(mProductInfo, "Product info", false);
 }
@@ -211,13 +214,17 @@ void ab::ProductView::CreateSupplierView()
 {
 	mSupplierView = new ab::SupplierView(mBook, wxID_ANY);
 	mSupplierView->mOnBack = [&]() {
+		Freeze();
 		auto& toptool = mManager.GetPane("TopToolBar");
 		auto& bottoll = mManager.GetPane("BottomToolBar");
 		if (!toptool.IsOk() || !bottoll.IsOk()) return;
 		toptool.Show(true);
 		bottoll.Show(true);
-		mBook->SetSelection(VIEW);
 		mManager.Update();
+
+		mSupplierView->UnLoad();
+		mBook->SetSelection(VIEW);
+		Thaw();
 	};
 	mBook->AddPage(mSupplierView, "Supplier view", false);
 }
@@ -631,6 +638,7 @@ void ab::ProductView::OnOpenProduct(wxCommandEvent& evt)
 
 void ab::ProductView::OnInvoiceView(wxCommandEvent& evt)
 {
+	CHECK_PHARMACIST_PRIVILAGE();
 	//hide toobars
 	auto& toptool = mManager.GetPane("TopToolBar");
 	auto& bottoll = mManager.GetPane("BottomToolBar");

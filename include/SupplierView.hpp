@@ -52,6 +52,7 @@ namespace ab {
 		virtual ~SupplierView() = default;
 
 		void Suppliers();
+		void UnLoad();
 	private:
 		void OnBack(wxCommandEvent& evt);
 		void OnAddSupplier(wxCommandEvent& evt);
@@ -67,7 +68,7 @@ namespace ab {
 		void CreateToolBar();
 		void CreatePanels();
 		void CreateViews();
-		
+
 		void SwitchTool(int page);
 		void LoadSuppliers(int start, int end);
 		void LoadInvoice(boost::uuids::uuid suppid, int start, int end);
