@@ -302,6 +302,33 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(grape::formulary_access_level, access_level)
 )
 
+
+BOOST_FUSION_DEFINE_STRUCT(
+(grape), invoice,
+(boost::uuids::uuid, pharm_id)
+(boost::uuids::uuid, branch_id)
+(boost::uuids::uuid, supplier_id)
+(boost::uuids::uuid, id)
+(boost::uuids::uuid, product_id)
+(boost::uuids::uuid, inventory_id)
+(std::chrono::system_clock::time_point, input_date)
+(std::string, name)
+(std::string, prod_name)
+(pof::base::currency, cost)
+
+)
+
+BOOST_FUSION_DEFINE_STRUCT(
+(grape), supplier,
+(boost::uuids::uuid, pharm_id)
+(boost::uuids::uuid, branch_id)
+(boost::uuids::uuid, id)
+(std::string, name)
+(std::chrono::system_clock::time_point, date_created)
+(std::chrono::system_clock::time_point, date_modified)
+(std::string, info)
+)
+
 BOOST_FUSION_DEFINE_STRUCT(
 	(grape), order,
 	(grape::order_state, state)

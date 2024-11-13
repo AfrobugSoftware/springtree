@@ -49,6 +49,7 @@ ab::ProductView::ProductView(wxWindow* parent, wxWindowID id, const wxPoint& pos
 
 	CreateView();
 	CreateProductInfo();
+	CreateSupplierView();
 
 	mManager.Update();
 }
@@ -204,6 +205,21 @@ void ab::ProductView::CreateProductInfo()
 		mManager.Update();
 	};
 	mBook->AddPage(mProductInfo, "Product info", false);
+}
+
+void ab::ProductView::CreateSupplierView()
+{
+	mSupplierView = new ab::SupplierView(mBook, wxID_ANY);
+	mSupplierView->mOnBack = [&]() {
+		auto& toptool = mManager.GetPane("TopToolBar");
+		auto& bottoll = mManager.GetPane("BottomToolBar");
+		if (!toptool.IsOk() || !bottoll.IsOk()) return;
+		toptool.Show(true);
+		bottoll.Show(true);
+		mBook->SetSelection(VIEW);
+		mManager.Update();
+	};
+	mBook->AddPage(mSupplierView, "Supplier view", false);
 }
 
 void ab::ProductView::Load()
@@ -615,6 +631,16 @@ void ab::ProductView::OnOpenProduct(wxCommandEvent& evt)
 
 void ab::ProductView::OnInvoiceView(wxCommandEvent& evt)
 {
+	//hide toobars
+	auto& toptool = mManager.GetPane("TopToolBar");
+	auto& bottoll = mManager.GetPane("BottomToolBar");
+	if (!toptool.IsOk() || !bottoll.IsOk()) return;
+	toptool.Show(false);
+	bottoll.Show(false);
+	mManager.Update();
+
+	mSupplierView->Suppliers();
+	mBook->SetSelection(SUPPLIER);
 }
 
 

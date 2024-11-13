@@ -29,6 +29,7 @@
 #include "Workspace.hpp"
 #include "AddProduct.hpp"
 #include "ProductInfo.hpp"
+#include "SupplierView.hpp"
 
 namespace ab {
 	class ProductView : public wxPanel {
@@ -40,6 +41,7 @@ namespace ab {
 			SERVER_ERROR,
 			VIEW,
 			INFO,
+			SUPPLIER,
 		};
 
 		enum {
@@ -82,6 +84,7 @@ namespace ab {
 		void CreateToolBar();
 		void CreateBottomTool();
 		void CreateProductInfo();
+		void CreateSupplierView();
 
 		void Load();
 		void Clear();
@@ -139,7 +142,7 @@ namespace ab {
 
 		//product info
 		ab::ProductInfo* mProductInfo = nullptr;
-
+		ab::SupplierView* mSupplierView = nullptr;
 		//empty
 		wxPanel* mEmptyPanel = nullptr;
 		wxStaticText* mEmptyText = nullptr;

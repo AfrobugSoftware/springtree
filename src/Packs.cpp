@@ -123,7 +123,7 @@ void ab::Packs::CreatePackTools()
 	mPackTools->AddTool(ID_TOOL_GO_BACK, "Back", wxArtProvider::GetBitmap("back", wxART_OTHER, FromDIP(wxSize(16, 16))));
 	mPackTools->AddSeparator();
 	mPackTools->AddSpacer(FromDIP(5));
-	mPackText = new wxStaticText(mPackTools, wxID_ANY, "TEST", wxDefaultPosition, wxDefaultSize, 0);
+	mPackText = new wxStaticText(mPackTools, wxID_ANY, wxEmptyString , wxDefaultPosition, wxDefaultSize, 0);
 	mPackText->SetFont(wxFontInfo().AntiAliased().Bold());
 	mPackText->SetBackgroundColour(*wxWHITE);
 	mTextItem = mPackTools->AddControl(mPackText);
