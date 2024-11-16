@@ -315,7 +315,7 @@ BOOST_FUSION_DEFINE_STRUCT(
 (std::string, name)
 (std::string, prod_name)
 (pof::base::currency, cost)
-
+(std::int64_t, quantity)
 )
 
 BOOST_FUSION_DEFINE_STRUCT(

@@ -13,6 +13,8 @@ BEGIN_EVENT_TABLE(ab::SupplierView, wxPanel)
 	EVT_TOOL(ab::SupplierView::ID_SUPPLIER_BACK, ab::SupplierView::OnBack)
 	EVT_TOOL(ab::SupplierView::ID_ADD_SUPPLIER,  ab::SupplierView::OnAddSupplier)
 	EVT_TOOL(ab::SupplierView::ID_CREATE_INVOICE, ab::SupplierView::OnAddInvoice)
+	EVT_MENU(ab::SupplierView::ID_CHANGE_QUANTITY, ab::SupplierView::OnQuantityChange)
+	EVT_MENU(ab::SupplierView::ID_REMOVE_PRODUCT, ab::SupplierView::OnRemoveProductInInvoice)
 END_EVENT_TABLE()
 
 ab::SupplierView::SupplierView(wxWindow* win, wxWindowID id, const wxPoint& position, const wxSize& size, long style)
@@ -54,26 +56,90 @@ void ab::SupplierView::UnLoad()
 	mInvoiceProductModel->Clear();
 }
 
+bool ab::SupplierView::GotoInvoice(boost::uuids::uuid invenid)
+{
+	auto& app = wxGetApp();
+	try {
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+		grape::credentials cred{
+		app.mPharmacyManager.account.account_id,
+		app.mPharmacyManager.account.session_id.value(),
+		app.mPharmacyManager.pharmacy.id,
+		app.mPharmacyManager.branch.id };
+
+		//get supplier from inventory id
+		grape::uid_t in{ invenid };
+		const size_t size = grape::serial::get_size(cred, in);
+		grape::body_type body(size, 0x00);
+		auto buf = grape::serial::write(boost::asio::buffer(body), cred, in);
+		auto fut = sess->req(http::verb::get, "/product/invoice/frominventory", std::move(body));
+		grape::session::response_type resp;
+		{
+			wxBusyInfo wait("Loading invoices\nPlease wait...");
+			resp = std::move(fut.get());
+		}
+
+		switch (resp.result())
+		{
+		case http::status::ok:
+			break;
+		case http::status::not_found:
+			wxMessageBox("No invoice for this inventory", "Supplier", wxICON_WARNING | wxOK);
+			return false;
+		default:
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+		auto& rbody = resp.body();
+		auto&& [nstr, rbuf] = grape::serial::read<grape::string_t>(boost::asio::buffer(rbody));
+		auto&& [col, rbuf2] = grape::serial::read<grape::collection_type<grape::invoice>>(rbuf);
+
+		auto& i = boost::fusion::at_c<0>(col);
+		mInvoiceProductModel->Reload(i, 0, i.size(), i.size());
+
+		mCurSupp.name = boost::fusion::at_c<0>(nstr);
+		boost::fusion::at_c<1>(mCurInvoice) = i[0].name;
+
+		//find and select the invoice
+		wxBusyInfo wait("Loading invoices\nPlease wait...");
+		std::string idstr = boost::lexical_cast<std::string>(invenid);
+		auto iter = std::find_if(mInvoiceProductModel->begin(),
+			mInvoiceProductModel->end(), [&](const auto& item) -> bool {
+				return boost::fusion::at_c<2>(item)[5].GetString().ToStdString()
+					== idstr;
+			});
+		const size_t idx = std::distance(mInvoiceProductModel->begin(), iter);
+		mInvoiceProductView->Select(ab::DataModel<grape::invoice>::ToDataViewItem(idx));
+		mInvoiceProductView->EnsureVisible(ab::DataModel<grape::invoice>::ToDataViewItem(idx));
+
+		UpdateTotals();
+		SwitchTool(INVOICE_PRODUCT_VIEW);
+		mBook->SetSelection(INVOICE_PRODUCT_VIEW);
+
+		ResetPage(); //so that back goes back to the right page
+		return true;
+	}
+	catch (const std::exception& exp)
+	{
+		wxMessageBox(std::format("Error loading invoice:\n{}", exp.what()), "Supplier", wxICON_ERROR | wxOK);
+		return false;
+	}
+}
+
 void ab::SupplierView::OnBack(wxCommandEvent& evt)
 {
-	if (evt.GetId() == ID_SUPPLIER_BACK)
+	switch (page)
 	{
+	case INVOICE_VIEW:
+		mBook->SetSelection(SUPPLIER_VIEW);
+		SwitchTool(SUPPLIER_VIEW);
+		break;
+	case INVOICE_PRODUCT_VIEW:
+		mBook->SetSelection(INVOICE_VIEW);
+		SwitchTool(INVOICE_VIEW);
+		break;
+	default:
 		mOnBack();
-	}
-	else {
-		switch (page)
-		{
-		case INVOICE_VIEW:
-			mBook->SetSelection(SUPPLIER_VIEW);
-			SwitchTool(SUPPLIER_VIEW);
-			break;
-		case INVOICE_PRODUCT_VIEW:
-			mBook->SetSelection(INVOICE_VIEW);
-			SwitchTool(INVOICE_VIEW);
-			break;
-		default:
-			break;
-		}
+		break;
 	}
 }
 
@@ -198,6 +264,7 @@ void ab::SupplierView::OnAddInvoice(wxCommandEvent& evt)
 		
 		size = grape::serial::get_size(cred, inv);
 		body = grape::body_type(size, 0x00);
+		buf = grape::serial::write(boost::asio::buffer(body), cred, inv);
 		fut  = sess->req(http::verb::post, "/product/invoice/add", std::move(body));
 		{
 			wxBusyInfo wait("Adding invoice\nPlease wait...");
@@ -213,8 +280,14 @@ void ab::SupplierView::OnAddInvoice(wxCommandEvent& evt)
 			throw std::logic_error(app.ParseServerError(resp));
 		}
 		auto& rbody = resp.body();
-		auto&& [id, rbuf] = grape::serial::read<grape::uid_t>(boost::asio::buffer(rbody));
-		inv.id = boost::fusion::at_c<0>(id);
+		auto&& [id, rbuf] = grape::serial::read<
+			boost::fusion::vector<
+				boost::uuids::uuid,
+				std::chrono::system_clock::time_point
+			>
+		>(boost::asio::buffer(rbody));
+		inv.id         = boost::fusion::at_c<0>(id);
+		inv.input_date = boost::fusion::at_c<1>(id);
 
 		mInvoiceModel->Add(invoice_t::fusion_t{ inv.id, inv.name, std::chrono::system_clock::now() });
 		mBook->SetSelection(INVOICE_VIEW);
@@ -263,7 +336,11 @@ void ab::SupplierView::OnOpenInvoice(wxDataViewEvent& evt)
 
 void ab::SupplierView::OnInvoiceProductContextMenu(wxDataViewEvent& evt)
 {
+	wxMenu* menu = new wxMenu;
+	auto p = menu->Append(ID_REMOVE_PRODUCT, "Remove product");
+	p->SetBitmap(wxArtProvider::GetBitmap("delete", wxART_OTHER, FromDIP(wxSize(16, 16))));
 
+	mInvoiceProductView->PopupMenu(menu);
 }
 
 void ab::SupplierView::OnProductSearch(wxCommandEvent& evt)
@@ -278,16 +355,35 @@ void ab::SupplierView::OnProductSearch(wxCommandEvent& evt)
 	wxSize sz   = mInvoiceProductSearch->GetClientSize();
 
 	mSearchPopup->SetPosition(wxPoint{ pos.x, pos.y + sz.y + 5 });
-	mSearchPopup->SetSize(FromDIP(wxSize(sz.x + 500, 400)));
+	mSearchPopup->SetSize(FromDIP(wxSize(sz.x + 50, 400)));
 
 	mSearchPopup->Search(str.ToStdString());
 	mSearchPopup->Popup();
+}
+
+void ab::SupplierView::OnQuantityChange(wxCommandEvent& evt)
+{
+}
+
+void ab::SupplierView::OnRemoveProductInInvoice(wxCommandEvent& evt)
+{
 }
 
 
 void ab::SupplierView::AddStock(const ab::pproduct& prod)
 {
 	auto& app = wxGetApp();
+	mInvoiceProductSearch->Clear();
+	if (std::any_of(mInvoiceProductModel->begin(),
+		mInvoiceProductModel->end(), [&](const auto& i) -> bool {
+			return prod.name ==
+				boost::fusion::at_c<2>(i)[8].GetString().ToStdString();
+		}))
+	{
+		wxMessageBox(std::format("{} is already added.", prod.name), "Supplier", wxICON_WARNING | wxOK);
+		return;
+	}
+
 	wxDialog dialog(this, wxID_ANY, "Add stock");
 	auto d = std::addressof(dialog);
 	d->SetSize(FromDIP(wxSize(591 , 398)));
@@ -365,8 +461,9 @@ void ab::SupplierView::AddStock(const ab::pproduct& prod)
 	boxSizer->Add(mButtonSizer, wxSizerFlags().Expand().Border(wxALL, FromDIP(5)));
 	topSizer->Add(boxSizer, wxSizerFlags().Expand().Border(wxALL, FromDIP(5)));
 	d->SetSizer(topSizer);
-	//topSizer->SetSizeHints(this);
+	topSizer->SetSizeHints(d);
 	d->Center();
+	mBatchNumber->SetFocus();
 	d->SetIcon(app.mAppIcon);
 	if (d->ShowModal() != wxID_OK)
 		return;
@@ -388,10 +485,9 @@ void ab::SupplierView::AddStock(const ab::pproduct& prod)
 		app.mPharmacyManager.pharmacy.id,
 		app.mPharmacyManager.branch.id };
 
-		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(inven);
+		const size_t size = grape::serial::get_size(cred, inven);
 		grape::body_type body(size, 0x00);
-		auto wbuf = grape::serial::write(boost::asio::buffer(body), cred);
-		auto wbuf2 = grape::serial::write(wbuf, inven);
+		auto wbuf = grape::serial::write(boost::asio::buffer(body), cred, inven);
 
 		auto fut = sess->req(http::verb::post, "/product/inventory/add", std::move(body));
 		grape::session::response_type resp;
@@ -438,11 +534,12 @@ void ab::SupplierView::AddStock(const ab::pproduct& prod)
 		inv.prod_name      = prod.name;
 		inv.cost           = inven.cost;
 		inv.inventory_id   = boost::fusion::at_c<0>(invenID);
+		inv.quantity       = inven.stock_count;
+		inv.input_date	   = std::chrono::system_clock::now();
 
-		const size_t size3 = grape::serial::get_size(cred) + grape::serial::get_size(inv);
-		grape::body_type body3(size2, 0x00);
-		auto wbuf7 = grape::serial::write(boost::asio::buffer(body3), cred);
-		auto wbuf8 = grape::serial::write(wbuf7, inv);
+		const size_t size3 = grape::serial::get_size(cred, inv);
+		grape::body_type body3(size3, 0x00);
+		auto wbuf7 = grape::serial::write(boost::asio::buffer(body3), cred, inv);
 		fut = sess->req(http::verb::post, "/product/invoice/add", std::move(body3));
 		{
 			wxBusyInfo wait("Adding product to invoice\nPlease wait...");
@@ -452,6 +549,8 @@ void ab::SupplierView::AddStock(const ab::pproduct& prod)
 			throw std::logic_error(app.ParseServerError(resp));
 
 		mInvoiceProductModel->Add(std::move(inv));
+		UpdateTotals();
+		mBook->SetSelection(INVOICE_PRODUCT_VIEW);
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());
@@ -469,7 +568,6 @@ void ab::SupplierView::CreateToolBar()
 {
 	mTools = new wxAuiToolBar(this, ID_TOOL, wxDefaultPosition, wxDefaultSize, wxAUI_TB_HORZ_LAYOUT | wxAUI_TB_HORZ_TEXT | wxAUI_TB_NO_AUTORESIZE | wxAUI_TB_OVERFLOW | wxNO_BORDER);
 	mTools->SetToolBitmapSize(FromDIP(wxSize(16, 16)));
-	mTools->AddSpacer(FromDIP(5));
 	mTools->AddTool(ID_SUPPLIER_BACK, "Back", wxArtProvider::GetBitmap("back", wxART_OTHER, FromDIP(wxSize(16, 16))), "Back");
 
 	mTools->AddSpacer(5);
@@ -504,19 +602,37 @@ void ab::SupplierView::CreateToolBar()
 	mInvoiceProductTools->SetToolBitmapSize(FromDIP(wxSize(16, 16)));
 
 	mInvoiceProductSearch = new wxSearchCtrl(mInvoiceProductTools, ID_PRODUCT_SEARCH, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(400, -1)), wxWANTS_CHARS);
+	mInvoiceProductSearch->SetHint("Search for product to add");
+	mInvoiceProductSearch->Bind(wxEVT_CHAR, [&](wxKeyEvent& evt) {
+		switch (evt.GetKeyCode()) {
+		case WXK_DOWN:
+			mSearchPopup->SetNext();
+			break;
+		case WXK_UP:
+			mSearchPopup->SetNext(false);
+			break;
+		case WXK_RETURN:
+			mSearchPopup->SetActivated();
+			break;
+		default:
+			evt.Skip();
+			break;
+		}
+	});
 	mInvoiceProductTools->AddTool(ID_BACK, "Back", wxArtProvider::GetBitmap("back", wxART_OTHER, FromDIP(wxSize(16, 16))), "Back");
 	mInvoiceProductTools->AddSpacer(FromDIP(5));
+	mInvoiceProductTools->AddSeparator();
 
 	mSupplierInvoiceName = new wxStaticText(mInvoiceProductTools, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0);
 	mSupplierInvoiceName->SetFont(wxFontInfo().AntiAliased().Bold());
 	mSupplierInvoiceName->SetBackgroundColour(*wxWHITE);
 
+	mInvoiceProductTools->AddSpacer(FromDIP(5));
 	mName2 = mInvoiceProductTools->AddControl(mSupplierInvoiceName);
-	mInvoiceProductTools->AddSpacer(FromDIP(5));
 
-	mInvoiceProductTools->AddSeparator();
-	mInvoiceProductTools->AddSpacer(FromDIP(5));
+	mInvoiceProductTools->AddSpacer(FromDIP(10));
 	mInvoiceProductTools->AddControl(mInvoiceProductSearch);
+	mInvoiceProductTools->AddSpacer(FromDIP(5));
 
 	mInvoiceProductTools->Realize();
 	mManager.AddPane(mInvoiceProductTools, wxAuiPaneInfo().Name("InvoiceProductTools").Top().MinSize(FromDIP(wxSize(-1, 30))).PaneBorder(false).ToolbarPane().Top().DockFixed().Row(1).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false).Hide());
@@ -549,6 +665,9 @@ void ab::SupplierView::CreatePanels()
 
 	std::tie(mServerErrorPanel, mServerErrorText, addButton) = app.CreateEmptyPanel(mBook, "Server error", wxART_ERROR);
 	addButton->SetLabel("Retry");
+	addButton->Bind(wxEVT_BUTTON, [&](wxCommandEvent& evt) {
+		DoRetry();
+	});
 	addButton->SetBitmap(wxArtProvider::GetBitmap("retry", wxART_OTHER, FromDIP(wxSize(16, 16))));
 
 
@@ -569,14 +688,14 @@ void ab::SupplierView::CreateViews()
 
 
 	mSupplierView->AppendTextColumn("Supplier Name", 3, wxDATAVIEW_CELL_INERT, FromDIP(450), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mSupplierView->AppendTextColumn("Date created",  4, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mSupplierView->AppendTextColumn("Date modified", 5, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mSupplierView->AppendDateColumn("Date created",  4, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mSupplierView->AppendDateColumn("Date modified", 5, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
 
 	mBook->AddPage(mSupplierView, "View", false);
 
 	mInvoiceView = new wxDataViewCtrl(mBook, ID_INVOICE_VIEW, wxDefaultPosition, wxDefaultSize, wxNO_BORDER | wxDV_ROW_LINES | wxDV_HORIZ_RULES);
-	mInvoiceView->AppendTextColumn("Invoices", 0, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mInvoiceView->AppendTextColumn("Date",     1, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mInvoiceView->AppendTextColumn("Invoices", 1, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mInvoiceView->AppendDateColumn("Date",     2, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
 	mInvoiceModel = new invoice_t();
 	mInvoiceView->AssociateModel(mInvoiceModel);
 	mInvoiceModel->DecRef();
@@ -593,11 +712,10 @@ void ab::SupplierView::CreateViews()
 	mInvoiceProductModel->DecRef();
 
 
-	mInvoiceProductView->AppendTextColumn("Product", 0, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mInvoiceProductView->AppendTextColumn("Stock entry", 1, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mInvoiceProductView->AppendTextColumn("Cost", 2, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mInvoiceProductView->AppendTextColumn("Entry date", 3, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
-	mInvoiceProductView->AppendTextColumn("Expiry date", 4, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mInvoiceProductView->AppendDateColumn("Entry date", 6, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mInvoiceProductView->AppendTextColumn("Product", 8, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mInvoiceProductView->AppendTextColumn("Stock entry", 10, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
+	mInvoiceProductView->AppendTextColumn("Cost", 9, wxDATAVIEW_CELL_INERT, FromDIP(250), wxALIGN_LEFT, wxDATAVIEW_COL_SORTABLE | wxDATAVIEW_COL_RESIZABLE | wxDATAVIEW_COL_REORDERABLE);
 
 	mCSPanel = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSIMPLE_BORDER | wxTAB_TRAVERSAL);
 	wxBoxSizer* bSizer4;
@@ -714,7 +832,7 @@ void ab::SupplierView::LoadSuppliers(int start, int end)
 		auto&& [supps, rbuf] = grape::serial::read<
 			grape::collection_type<grape::supplier>>(boost::asio::buffer(rbody));
 		mSupplierView->Freeze();
-		mSupplierModel->Reload(boost::fusion::at_c<0>(supps), start , start + end, 100);
+		mSupplierModel->Reload(boost::fusion::at_c<0>(supps), start , start + end, boost::fusion::at_c<0>(supps).size());
 		mSupplierView->Thaw();
 
 		mWaitIndicator->Stop();
@@ -756,7 +874,7 @@ void ab::SupplierView::LoadInvoice(boost::uuids::uuid suppid, int start, int end
 		case http::status::ok:
 			break;
 		case http::status::not_found:
-			mBook->SetSelection(SUPPLIER_EMPTY);
+			mBook->SetSelection(INVOICE_EMPTY);
 			return;
 		default:
 			throw std::logic_error(app.ParseServerError(resp));
@@ -784,6 +902,7 @@ void ab::SupplierView::LoadInvoiceProducts(boost::uuids::uuid invoiceID)
 {
 	auto& app = wxGetApp();
 	try {
+		mInvoiceProductModel->Clear();
 		grape::credentials cred{
 			app.mPharmacyManager.account.account_id,
 			app.mPharmacyManager.account.session_id.value(),
@@ -792,14 +911,13 @@ void ab::SupplierView::LoadInvoiceProducts(boost::uuids::uuid invoiceID)
 		};
 		grape::collection_type<grape::uid_t> ids;
 		auto& is = boost::fusion::at_c<0>(ids);
-		is.emplace_back(grape::uid_t{ mCurSupp.id });
 		is.emplace_back(grape::uid_t{ invoiceID });
+		is.emplace_back(grape::uid_t{ mCurSupp.id });
 
-		const size_t size = grape::serial::get_size(cred) + grape::serial::get_size(ids);
+		const size_t size = grape::serial::get_size(cred, ids);
 		grape::body_type body(size, 0x00);
 
-		auto buf = grape::serial::write(boost::asio::buffer(body), cred);
-		auto buf2 = grape::serial::write(buf, ids);
+		auto buf = grape::serial::write(boost::asio::buffer(body), cred, ids);
 		auto fut = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl())
 			->req(http::verb::get, "/product/invoice/getproducts", std::move(body));
 		grape::session::response_type resp = fut.get();
@@ -808,7 +926,7 @@ void ab::SupplierView::LoadInvoiceProducts(boost::uuids::uuid invoiceID)
 		case http::status::ok:
 			break;
 		case http::status::not_found:
-			mBook->SetSelection(INVOICE_EMPTY);
+			mBook->SetSelection(INVOICE_PRODUCT_EMPTY);
 			return;
 		default:
 			throw std::logic_error(app.ParseServerError(resp));
@@ -822,7 +940,8 @@ void ab::SupplierView::LoadInvoiceProducts(boost::uuids::uuid invoiceID)
 
 		mWaitIndicator->Stop();
 		mInvoiceProductModel->Reload(i, 0, i.size(), i.size());
-		mBook->SetSelection(INVOICE_VIEW);
+		UpdateTotals();
+		mBook->SetSelection(INVOICE_PRODUCT_VIEW);
 	}
 	catch (const std::exception& exp)
 	{
@@ -830,4 +949,56 @@ void ab::SupplierView::LoadInvoiceProducts(boost::uuids::uuid invoiceID)
 		mBook->SetSelection(SERVER_ERROR);
 		mServerErrorPanel->Layout();
 	}
+}
+
+void ab::SupplierView::DoRetry()
+{
+	mBook->SetSelection(WAIT_PANEL);
+	mWaitIndicator->Start();
+
+	auto& app = wxGetApp();
+	switch (page)
+	{
+	case SUPPLIER_VIEW:
+		boost::asio::post(app.mTaskManager.tp(),
+			std::bind_front(&ab::SupplierView::LoadSuppliers, this, 0, 100));
+		break;
+	case INVOICE_VIEW:
+		boost::asio::post(app.mTaskManager.tp(),
+			std::bind_front(&ab::SupplierView::LoadInvoice, this, mCurSupp.id, 0, 100));
+		break;
+	case INVOICE_PRODUCT_VIEW:
+		boost::asio::post(app.mTaskManager.tp(),
+			std::bind_front(&ab::SupplierView::LoadInvoiceProducts, this, boost::fusion::at_c<0>(mCurInvoice)));
+		break;
+	}
+
+}
+
+void ab::SupplierView::UpdateTotals()
+{
+	const auto funCur = [](const std::string& string) -> pof::base::currency
+	{
+		auto pos = string.find_first_of(" ");
+		auto str = string.substr(pos);
+		auto i = std::ranges::remove_if(str,
+			[&](char c) ->bool {return c == ','; });
+		str.erase(i.begin(), i.end());
+
+		return pof::base::currency(str);
+	};
+	pof::base::currency total;
+	std::int64_t quan = 0;
+	std::for_each(mInvoiceProductModel->begin(),
+		mInvoiceProductModel->end(), [&](const auto& i) {
+		const auto& v = boost::fusion::at_c<2>(i);
+		total += funCur(v[9].GetString().ToStdString());
+		quan  += v[10].GetInteger();
+	});
+
+	mCSPanel->Freeze();
+	mTotalStock->SetLabel(fmt::format("Total stock: {:d}", quan));
+	mTotalAmount->SetLabel(fmt::format("Total amount: {:cu}", total));
+	mCSPanel->Layout();
+	mCSPanel->Thaw();
 }

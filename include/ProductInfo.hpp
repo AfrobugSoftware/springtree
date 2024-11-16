@@ -45,6 +45,7 @@ namespace ab {
 			ID_INVEN_TOOLBAR,
 			ID_INVEN_START_DATE_PICKER,
 			ID_INVEN_STOP_DATE_PICKER,
+			ID_SHOW_INVOICE,
 		};
 
 		//inventory book pages 
@@ -86,6 +87,8 @@ namespace ab {
 		void OnAddStock(wxCommandEvent& evt);
 		void OnCacheHint(wxDataViewEvent& evt);
 		void OnSave(wxCommandEvent& evt);
+		void OnShowInvoice(wxCommandEvent& evt);
+		void OnContextMenu(wxDataViewEvent& evt);
 
 		void EnableByFormulary();
 		void GetInventory(size_t begin, size_t limit);
@@ -150,6 +153,7 @@ namespace ab {
 		std::atomic<bool> mInvenoryRunning;
 		std::atomic<size_t> mInventoryCount;
 		std::function<void(void)> mOnBack;
+		std::function<void(const boost::uuids::uuid& id)> mOnGoToInvoice;
 		DECLARE_EVENT_TABLE();
 	};
 };

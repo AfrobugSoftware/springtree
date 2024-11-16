@@ -192,6 +192,7 @@ void ab::ProductView::CreateBottomTool()
 
 void ab::ProductView::CreateProductInfo()
 {
+	static std::function<void(void)> sTemp;
 	mProductInfo = new ab::ProductInfo(mBook, wxID_ANY);
 	mProductInfo->mOnBack = [&]() {
 		Freeze();
@@ -206,6 +207,19 @@ void ab::ProductView::CreateProductInfo()
 		mProductInfo->UnLoad();
 		mBook->SetSelection(VIEW);
 		Thaw();
+	};
+	mProductInfo->mOnGoToInvoice = [&](const boost::uuids::uuid& exp)
+	{
+			sTemp = mProductInfo->mOnBack;
+			mSupplierView->mOnBack = [&]() {
+				mBook->SetSelection(INFO);
+				mSupplierView->mOnBack = sTemp;
+			};
+			if(!mSupplierView->GotoInvoice(exp))
+			{
+				mSupplierView->mOnBack = sTemp;
+			}else mBook->SetSelection(SUPPLIER);
+
 	};
 	mBook->AddPage(mProductInfo, "Product info", false);
 }

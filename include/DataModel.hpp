@@ -200,6 +200,7 @@ namespace ab {
 
 		void Clear() {
 			vec_base::clear();
+			mVirtualCount = 0;
 			Cleared();
 		}
 

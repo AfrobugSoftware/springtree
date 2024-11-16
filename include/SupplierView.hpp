@@ -31,6 +31,8 @@ namespace ab {
 			ID_BACK,
 			ID_SUPPLIER_BACK,
 			ID_PRODUCT_SEARCH,
+			ID_CHANGE_QUANTITY,
+			ID_REMOVE_PRODUCT,
 
 		};
 		enum {
@@ -53,6 +55,9 @@ namespace ab {
 
 		void Suppliers();
 		void UnLoad();
+
+		bool GotoInvoice(boost::uuids::uuid invenid);
+		constexpr void ResetPage() { page = SUPPLIER_VIEW; }
 	private:
 		void OnBack(wxCommandEvent& evt);
 		void OnAddSupplier(wxCommandEvent& evt);
@@ -62,6 +67,8 @@ namespace ab {
 		void OnOpenInvoice(wxDataViewEvent& evt);
 		void OnInvoiceProductContextMenu(wxDataViewEvent& evt);
 		void OnProductSearch(wxCommandEvent& evt);
+		void OnQuantityChange(wxCommandEvent& evt);
+		void OnRemoveProductInInvoice(wxCommandEvent& evt);
 
 		void AddStock(const ab::pproduct& prod);
 		void OnAuiThemeChange();
@@ -73,7 +80,8 @@ namespace ab {
 		void LoadSuppliers(int start, int end);
 		void LoadInvoice(boost::uuids::uuid suppid, int start, int end);
 		void LoadInvoiceProducts(boost::uuids::uuid invoiceID);
-
+		void DoRetry();
+		void UpdateTotals();
 
 		wxAuiToolBar* mTools;
 		wxAuiToolBar* mInvoiceTools;

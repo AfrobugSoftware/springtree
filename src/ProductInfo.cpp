@@ -13,6 +13,8 @@ BEGIN_EVENT_TABLE(ab::ProductInfo, wxPanel)
 	EVT_DATE_CHANGED(ab::ProductInfo::ID_INVEN_START_DATE_PICKER, ab::ProductInfo::OnDateChange)
 	EVT_DATE_CHANGED(ab::ProductInfo::ID_INVEN_STOP_DATE_PICKER, ab::ProductInfo::OnDateChange)
 	EVT_DATAVIEW_CACHE_HINT(ab::ProductInfo::ID_DATA_VIEW, ab::ProductInfo::OnCacheHint)
+	EVT_DATAVIEW_ITEM_CONTEXT_MENU(ab::ProductInfo::ID_DATA_VIEW, ab::ProductInfo::OnContextMenu)
+	EVT_MENU(ab::ProductInfo::ID_SHOW_INVOICE, ab::ProductInfo::OnShowInvoice)
 END_EVENT_TABLE()
 
 
@@ -419,6 +421,23 @@ void ab::ProductInfo::OnSave(wxCommandEvent& evt)
 		mInventoryErrorText->SetLabel(std::format("Failed to save\n{}", exp.what()));
 		mInventoryBook->SetSelection(INVEN_ERROR);
 	}
+}
+
+void ab::ProductInfo::OnShowInvoice(wxCommandEvent& evt)
+{
+	auto item = mInventoryView->GetSelection();
+	if (!item.IsOk()) return;
+	const auto& invs = mInventoryModel->GetRow(ab::DataModel<grape::inventory>::FromDataViewItem(item));
+	mOnGoToInvoice(boost::lexical_cast<boost::uuids::uuid>(invs[2].GetString().ToStdString()));
+}
+
+void ab::ProductInfo::OnContextMenu(wxDataViewEvent& evt)
+{
+	wxMenu* menu = new wxMenu;
+	auto s = menu->Append(ID_SHOW_INVOICE, "Open invoice");
+	s->SetBitmap(wxArtProvider::GetBitmap("file_open", wxART_OTHER, FromDIP(wxSize(16, 16))));
+
+	mInventoryView->PopupMenu(menu);
 }
 
 void ab::ProductInfo::OnDateChange(wxDateEvent& evt)

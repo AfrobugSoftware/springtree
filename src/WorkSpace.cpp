@@ -29,6 +29,7 @@ bool ab::Workspace::AddSpace(wxWindow* space, const std::string& name, int img)
 {
 	if (!space) return false;
 	// check if already inserted
+	mWorkspacebook->Freeze();
 	auto pageidx = mWorkspacebook->GetPageIndex(space);
 	if (pageidx != wxNOT_FOUND) {
 		if (!space->IsShown()) space->Show();
@@ -38,6 +39,7 @@ bool ab::Workspace::AddSpace(wxWindow* space, const std::string& name, int img)
 	}
 	auto ret = mWorkspacebook->AddPage(space, name, true, img);
 	notifsignal(ab::Workspace::notif::added, space);
+	mWorkspacebook->Thaw();
 	return ret;
 }
 
