@@ -1,7 +1,10 @@
 #pragma once
 #include <wx/font.h>
 #include <wx/print.h>
+#include "Grape.hpp"
 
+#include <vector>
+#include <functional>
 namespace ab {
 	class Printout : public wxPrintout
 	{
@@ -53,7 +56,7 @@ namespace ab {
 		wxPrintDialogData* mPrintDialogData;
 
 		wxPageSetupDialogData m_page_setup;
-
+		std::vector<grape::sale_display> mSaleCache;
 		/** the type of paper (letter, A4, etc...) */
 		wxPaperSize m_paper_type;
 		int m_coord_system_width, m_coord_system_height;

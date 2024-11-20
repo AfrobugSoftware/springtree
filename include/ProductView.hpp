@@ -60,6 +60,7 @@ namespace ab {
 			ID_DELETE_PRODUCT,
 			ID_OPEN_PRODUCT,
 			ID_OPEN_INVOICES,
+			ID_REPORTS,
 		};
 
 		enum {
@@ -97,6 +98,7 @@ namespace ab {
 			wxWindow* win);
 
 		std::set<std::string> mSelections; //string represnetation of uuid.
+		bool OnLogout();
 	private:
 		void OnBack(wxCommandEvent& evt);
 		void OnForward(wxCommandEvent& evt);
@@ -118,6 +120,7 @@ namespace ab {
 		void OnDeleteProduct(wxCommandEvent& evt);
 		void OnOpenProduct(wxCommandEvent& evt);
 		void OnInvoiceView(wxCommandEvent& evt);
+		void OnReports(wxCommandEvent& evt);
 		//grape functions 
 		void GetProducts(size_t begin, size_t limit);
 		void AppendProducts(size_t from, size_t to);
@@ -127,7 +130,6 @@ namespace ab {
 
 		void SetupAuiTheme();
 		void OnAuiThemeChange();
-
 
 		wxAuiManager mManager;
 		wxDataViewCtrl* mView = nullptr;

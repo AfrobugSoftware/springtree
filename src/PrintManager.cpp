@@ -28,14 +28,16 @@ void ab::PrintManager::PrinterSetup()
 	(*mPageSetupData) = pageSetupDialog.GetPageSetupDialogData();
 }
 
-void ab::PrintManager::PrintReceipt(size_t type)
+void ab::PrintManager::PrintReceipt(size_t type, std::optional<std::vector<grape::sale_display>> sa)
 {
 	gPrintState = type;
 	po = new ab::Printout(mPrintDialogData.get());
+	if (sa.has_value()) po->mSaleCache = std::move(sa.value());
 	po->mFooterMessage = "THANK YOU FOR YOUR PATRONAGE!";
 	if (wxGetApp().bShowPreviewOnSale) {
 		po2 = new ab::Printout(mPrintDialogData.get());
 		po2->mFooterMessage = "THANK YOU FOR YOUR PATRONAGE!";
+		if (sa.has_value()) po2->mSaleCache = std::move(sa.value());
 		Preview(wxGetApp().mMainFrame, po, po2);
 	}
 	else {

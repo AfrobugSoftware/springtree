@@ -69,10 +69,11 @@ bool ab::Application::OnInit()
 			}
 		}
 
-		SaveSettings(); 
 		mMainFrame = new ab::MainFrame(nullptr, wxID_ANY, wxDefaultPosition, wxSize(822, 762));
-		mMainFrame->Maximize();
+		mMainFrame->Maximize();	
 		mMainFrame->Show(true);
+
+		SaveSettings(); 
 		return true;
 	}
 	catch (const std::exception& exp) {
@@ -137,6 +138,7 @@ bool ab::Application::LoadSettings()
 		
 		settings = js::json::parse(os.str());
 		LoadReceiptPageSettings();
+		
 
 		boost::uuids::uuid id = boost::lexical_cast<boost::uuids::uuid>(static_cast<std::string>(settings["pharmacy_id"]));
 
@@ -203,6 +205,7 @@ bool ab::Application::SaveSettings()
 {
 	try {
 		SaveReceiptPageSettings();
+		SaveLastReceipt(mMainFrame->GetSaleView()->mReceipt);
 
 
 		auto fpath = fs::current_path() / ".data"s / "settings.json";
@@ -444,8 +447,53 @@ std::string ab::Application::ParseServerError(const grape::session::response_typ
 	}
 	catch (const std::exception& exp) {
 		spdlog::error(exp.what());
-		return ""s;
+		return exp.what();
 	}
+}
+
+bool ab::Application::SignOut()
+{
+	try {
+		grape::credentials cred{
+				mPharmacyManager.account.account_id,
+				mPharmacyManager.account.session_id.value(),
+				mPharmacyManager.pharmacy.id,
+				mPharmacyManager.branch.id
+		};
+		const size_t size = grape::serial::get_size(cred);
+		grape::body_type body(size, 0x00);
+
+		auto buf = grape::serial::write(boost::asio::buffer(body), cred);
+		auto fut = std::make_shared<grape::session>(mNetManager.io(), mNetManager.ssl())
+			->req(http::verb::post, "/account/signout", std::move(body));
+		grape::session::response_type resp{};
+		{
+			wxBusyInfo wait("Logging out\nPlease wait...");
+			resp = std::move(fut.get());
+		}
+		switch (resp.result())
+		{
+		case http::status::ok:
+			break;
+		default:
+			throw std::logic_error(ParseServerError(resp));
+		}
+
+		mMainFrame->Hide();
+		ab::SignIn sin(nullptr);
+		if (sin.ShowModal() != wxID_OK) {
+			mMainFrame->Close();
+			return false;
+		}
+		mMainFrame->ReloadFrame();
+		mMainFrame->Show();
+	}
+	catch (const std::exception& exp)
+	{
+		wxMessageBox(std::format("Cannot log out\n{}", exp.what()), "Log out", wxICON_ERROR | wxOK);
+		return false;
+	}
+	return true;
 }
 
 void ab::Application::SaveReceiptPageSettings()
@@ -524,6 +572,50 @@ void ab::Application::LoadReceiptPageSettings()
 		f.SetStyle(static_cast<int>(rpFontSettings["fontStyle"]));
 		mReceiptFontSettings.SetChosenFont(f);
 	}
+}
+
+void ab::Application::SaveLastReceipt(const grape::sale_receipt& receipt)
+{
+	auto lr = settings.find("lastReceipt");
+	if (lr != settings.end())
+	{
+		auto& r       = *lr;
+		r["id"]       = receipt.id.data;
+		r["date"]     = receipt.date.time_since_epoch().count();
+		r["quantity"] = receipt.quantity;
+		r["total"]    = std::bit_cast<std::array<unsigned char,
+			pof::base::currency::max>>(receipt.total.data());
+	}
+	else 
+	{
+		js::json r    = js::json::object();
+		r["id"]		  = receipt.id.data;
+		r["date"]	  = receipt.date.time_since_epoch().count();
+		r["quantity"] = receipt.quantity;
+		r["total"]	  = std::bit_cast<std::array<unsigned char,
+			pof::base::currency::max>>(receipt.total.data());
+
+		settings["lastReceipt"] = r;
+	}
+
+}
+
+void ab::Application::LoadLastReceipt(grape::sale_receipt& recipt)
+{
+	auto lr = settings.find("lastReceipt");
+	if (lr == settings.end()) return;
+	auto& r = *lr;
+	std::copy(r["id"].begin(), r["id"].end(), recipt.id.begin());
+	auto tot = r["total"].begin();
+	for (int i = 0; i < pof::base::currency::max; i++, tot++)
+	{
+		recipt.total.data()[i] = static_cast<std::uint8_t>(*tot);
+	}
+
+	//std::copy(r["total"].begin(), r["total"].end(), recipt.total.data().begin());
+	recipt.date = std::chrono::system_clock::time_point(
+		std::chrono::system_clock::duration(static_cast<std::chrono::system_clock::duration::rep>(r["date"])));	
+	recipt.quantity = static_cast<std::int64_t>(r["quantity"]);
 }
 
 bool ab::Application::LoadAppDetails()

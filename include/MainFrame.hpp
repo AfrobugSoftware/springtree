@@ -11,6 +11,7 @@
 #include <fmt/chrono.h>
 #include <format>
 
+//#include <boost/signals2/signal.hpp>
 
 #include "Workspace.hpp"
 #include "Module.hpp"
@@ -20,9 +21,25 @@
 #include "SaleView.hpp"
 
 namespace ab {
+
+	class Combiner
+	{
+	public:
+		using result_type = std::vector<bool>;
+		template <typename InputIterator>
+		result_type operator()(InputIterator first, InputIterator last) const {
+			result_type results;
+			for (; first != last; ++first) {
+				results.push_back(*first);
+			}
+			return results;
+		}
+	};
+
 	class MainFrame : public wxFrame
 	{
 	public:
+		boost::signals2::signal<bool(), ab::Combiner> gLogout;
 		constexpr static const std::array<std::string_view, 12> monthNames = { "Jaunary", "Febuary", "March", "April",
 		"May", "June", "July", "August", "September", "October", "November", "December" };
 
@@ -34,10 +51,11 @@ namespace ab {
 		};
 
 		enum {
-			ID_MODULE = wxID_HIGHEST + 10,
+			ID_MODULE = wxID_HIGHEST + 101,
 			ID_WORKSPACE,
 			ID_PAGER,
 			ID_ABOUT,
+			ID_LOGOUT,
 		};
 
 
@@ -56,10 +74,12 @@ namespace ab {
 		void CreateImageList();
 
 		constexpr ab::SaleView* GetSaleView() { return mSaleView; }
+		void ReloadFrame();
 	private:
 		void OnWelcomePageSelect(wxListEvent& evt);
 		void OnAbout(wxCommandEvent& evt);
 		void OnIdle(wxIdleEvent& evt);
+		void OnLogOut(wxCommandEvent& evt);
 
 		//signals
 		void OnModuleActivated(const ab::mod& mod, ab::module_evt evt);

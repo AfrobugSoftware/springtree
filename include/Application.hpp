@@ -145,9 +145,11 @@ namespace ab {
 		int copies            = 1;
 		wxPaperSize paperSize = wxPAPER_A4;
 
+		bool SignOut();
 		void SaveReceiptPageSettings();
 		void LoadReceiptPageSettings();
-
+		void SaveLastReceipt(const grape::sale_receipt& recipt);
+		void LoadLastReceipt(grape::sale_receipt& recipt);
 		//icon 
 		wxIcon   mAppIcon;
 		js::json settings;

@@ -10,12 +10,11 @@ BEGIN_EVENT_TABLE(ab::SaleView, wxPanel)
 	EVT_TOOL(ab::SaleView::ID_PACKS,          ab::SaleView::OnOpenPacks)
 	EVT_TOOL(ab::SaleView::ID_REMOVE_PRODUCT, ab::SaleView::OnRemoveProduct)
 	EVT_TOOL(ab::SaleView::ID_PACKS,          ab::SaleView::OnOpenPacks)
-
+	EVT_AUITOOLBAR_TOOL_DROPDOWN(ab::SaleView::ID_REPRINT, ab::SaleView::OnReprint)
 	EVT_SEARCH(ab::SaleView::ID_PRODUCT_SEARCH_NAME, ab::SaleView::OnProductSearch)
 	EVT_TEXT(ab::SaleView::ID_PRODUCT_SEARCH_NAME,   ab::SaleView::OnProductSearch)
-	//EVT_TEXT(ab::SaleView::ID_PRODUCT_SCAN,          ab::SaleView::OnBarcodeSearch)
-	EVT_SEARCH(ab::SaleView::ID_PRODUCT_SCAN,        ab::SaleView::OnBarcodeSearch)
-
+	EVT_SEARCH(ab::SaleView::ID_PRODUCT_SCAN,       ab::SaleView::OnBarcodeSearch)
+	EVT_MENU(ab::SaleView::ID_REPRINT_LAST,			ab::SaleView::OnReprintLast)
 	EVT_SEARCH_CANCEL(ab::SaleView::ID_PRODUCT_SEARCH_NAME,  ab::SaleView::OnProductSearchCleared)
 	EVT_AUINOTEBOOK_PAGE_CLOSE(ab::SaleView::ID_SALE_BOOK,   ab::SaleView::OnSaleNotebookClosing)
 	EVT_AUINOTEBOOK_PAGE_CLOSED(ab::SaleView::ID_SALE_BOOK,  ab::SaleView::OnSaleNotebookClosed)
@@ -409,6 +408,8 @@ void ab::SaleView::PrintComplete(bool status, size_t work)
 
 		model->Clear();
 		ClearTotals();
+
+		wxGetApp().SaveSettings(); //save last receipt
 		mInfoBar->ShowMessage("Sale complete", wxICON_INFORMATION);
 	}
 		break;
@@ -430,6 +431,23 @@ ab::DataModel<grape::sale_display>* ab::SaleView::GetCurrentModel() const
 	return model;
 }
 
+bool ab::SaleView::OnLogOut()
+{
+	if (mSaleView.empty()) return true;
+	int i = 0;
+	for (auto& v : mSaleView)
+	{
+		i++;
+		auto model = dynamic_cast<ab::DataModel<grape::sale_display>*>(v->GetModel());
+		if (!model) continue;
+		if (!model->empty()){
+			wxMessageBox(std::format("Cannot logout, Sale - {:d} has items that are not sold", i), "Logout", wxICON_WARNING | wxOK);
+			return false;
+		}
+	}
+	return true;
+}
+
 void ab::SaleView::OnCheckOut(wxCommandEvent& evt)
 {
 	int idx = mSaleNotebook->GetSelection();
@@ -443,6 +461,7 @@ void ab::SaleView::OnCheckOut(wxCommandEvent& evt)
 		wxBusyInfo wait("Checking out sale\nPlease wait...");
 		auto& app = wxGetApp();
 		std::vector<grape::sale> mSales;
+		std::vector<grape::sale_display> mSaleToPrint;
 		mSales.reserve(model->size());
 		for (auto& item : *model) {
 			auto& v = boost::fusion::at_c<2>(item);
@@ -459,6 +478,8 @@ void ab::SaleView::OnCheckOut(wxCommandEvent& evt)
 			s.discount    = funCur(v[3].GetString().ToStdString());
 			s.total       = funCur(v[4].GetString().ToStdString());
 			s.quantity    = v[1].GetLong();
+
+			mSaleToPrint.emplace_back(ab::make_struct<grape::sale_display>(v));
 		}
 
 		grape::collection_type<grape::sale> collection;
@@ -491,7 +512,7 @@ void ab::SaleView::OnCheckOut(wxCommandEvent& evt)
 
 			mReceipt = sr;
 			wxBusyInfo wait("Printing receipt\nPlease wait...");
-			app.mPrintManager.PrintReceipt(ab::PrintManager::RECEIPT);
+			app.mPrintManager.PrintReceipt(ab::PrintManager::RECEIPT, std::move(mSaleToPrint));
 		}
 		break;
 		default:
@@ -612,7 +633,7 @@ void ab::SaleView::OnBarcodeSearch(wxCommandEvent& evt)
 			->req(http::verb::get, "/product/search/barcode", std::move(body));
 		grape::session::response_type resp{};
 		{
-			wxBusyInfo wait("Searching for product\nPlease wait");
+			wxBusyInfo wait("Searching for product\nPlease wait...");
 			resp = std::move(fut.get());
 		}
 		switch (resp.result())
@@ -697,6 +718,74 @@ void ab::SaleView::OnRemoveProduct(wxCommandEvent& evt)
 
 	model->Remove(iter);
 	UpdateTotals();
+}
+
+void ab::SaleView::OnReprint(wxAuiToolBarEvent& evt)
+{
+	if (evt.IsDropDownClicked())
+	{
+		wxMenu* menu = new wxMenu;
+		auto a = menu->Append(ID_REPRINT_LAST, "Print last");
+		a->SetBitmap(wxArtProvider::GetBitmap("acute", wxART_OTHER, FromDIP(wxSize(16,16))));
+		wxPoint pos = mReprintItem->GetSizerItem()->GetPosition();
+		wxSize sz   = mReprintItem->GetSizerItem()->GetSize();
+		mBottomTools->PopupMenu(menu, wxPoint{ pos.x, pos.y + sz.y + 2 });
+		return;
+	}
+	
+}
+
+void ab::SaleView::OnReprintLast(wxCommandEvent& evt)
+{
+	if (mReceipt.id.is_nil()) {
+		wxMessageBox("No sale has been performed.", "Sales", wxICON_WARNING | wxOK);
+		return;
+	}
+	auto& app = wxGetApp();
+	try {
+		auto sess = std::make_shared<grape::session>(app.mNetManager.io(), app.mNetManager.ssl());
+		grape::credentials cred{
+		app.mPharmacyManager.account.account_id,
+		app.mPharmacyManager.account.session_id.value(),
+		app.mPharmacyManager.pharmacy.id,
+		app.mPharmacyManager.branch.id };
+
+		grape::uid_t saleId{ mReceipt.id };
+
+		const size_t size = grape::serial::get_size(cred, saleId);
+		grape::body_type body(size, 0x00);
+		auto buf = grape::serial::write(boost::asio::buffer(body), cred, saleId);
+
+		auto fut = sess->req(http::verb::get, "/sale/getreceipt", std::move(body));
+		grape::session::response_type resp;
+		{
+			wxBusyInfo wait("Fetching last sale\nPlease wait...");
+			resp = std::move(fut.get());
+		}
+		switch (resp.result())
+		{
+		case http::status::ok:
+			break;
+		case http::status::not_found:
+			wxMessageBox("No products in last sale", "Sales", wxICON_ERROR | wxOK);
+			return;
+		default:
+			throw std::logic_error(app.ParseServerError(resp));
+		}
+		auto& rbody = resp.body();
+		auto&& [sr, rbuf]        = grape::serial::read<grape::sale_receipt>(boost::asio::buffer(rbody));
+		auto&& [sale_col, rbuf2] = grape::serial::read<grape::collection_type<grape::sale_display>>(rbuf);
+
+		//reprinting
+		mReceipt = sr;
+		auto& sale = boost::fusion::at_c<0>(sale_col);
+		wxBusyInfo wait("Printing receipt\nPlease wait...");
+		app.mPrintManager.PrintReceipt(ab::PrintManager::RECEIPT, std::move(sale));
+	}
+	catch (const std::exception& exp)
+	{
+		wxMessageBox(std::format("Cannot reprint;\n{}", exp.what()), "Sales", wxICON_ERROR | wxOK);
+	}
 }
 
 void ab::SaleView::OnSearchedProduct(const grape::sale_display& saleproduct)

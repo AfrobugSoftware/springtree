@@ -28,10 +28,10 @@ namespace ab {
 			ID_DISCOUNT,
 			ID_NEW_SALE,
 			ID_SALE_BOOK,
-
-			//MUST BE THE LAST ID
 			ID_SALE_VIEW,
 			ID_PAY_VIEW,
+			ID_REPRINT_LAST,
+
 		};
 
 		enum {
@@ -52,6 +52,8 @@ namespace ab {
 		void PrintComplete(bool status, size_t work);
 		ab::DataModel<grape::sale_display>* GetCurrentModel() const;
 		grape::sale_receipt mReceipt;
+
+		bool OnLogOut();
 	private:
 		constexpr static size_t max_view = 10;
 		pof::base::currency mCurTotal;
@@ -64,7 +66,8 @@ namespace ab {
 		void OnProductSearch(wxCommandEvent& evt);
 		void OnProductSearchCleared(wxCommandEvent& evt);
 		void OnRemoveProduct(wxCommandEvent& evt);
-
+		void OnReprint(wxAuiToolBarEvent& evt);
+		void OnReprintLast(wxCommandEvent& evt);
 		//sale book management
 		void OnSaleNotebookClosed(wxAuiNotebookEvent& evt);
 		void OnSaleNotebookClosing(wxAuiNotebookEvent& evt);
@@ -140,7 +143,6 @@ namespace ab {
 		wxPanel* mEmpty = nullptr;
 		bool mLocked = false;
 		size_t mSaleType = 0;
-
 
 		DECLARE_EVENT_TABLE();
 	};

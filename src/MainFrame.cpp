@@ -2,6 +2,7 @@
 #include "Application.hpp"
 BEGIN_EVENT_TABLE(ab::MainFrame, wxFrame)
 	EVT_MENU(ab::MainFrame::ID_ABOUT, ab::MainFrame::OnAbout)
+	EVT_MENU(ab::MainFrame::ID_LOGOUT, ab::MainFrame::OnLogOut)
 END_EVENT_TABLE()
 
 
@@ -77,6 +78,7 @@ void ab::MainFrame::CreateMenubar()
 		"Help"
 	};
 
+	Menus[0]->Append(ID_LOGOUT, "Log out");
 
 	wxMenuBar* bar = new wxMenuBar(MenuCount, Menus.data(), MenuTitle.data());
 	SetMenuBar(bar);
@@ -99,6 +101,7 @@ void ab::MainFrame::CreateModules()
 	mod.img = 0;
 	mod.id = mModules->mProducts;
 	mModules->Add(std::move(mod));
+	gLogout.connect(std::bind_front(&ab::ProductView::OnLogout, mProductView));
 
 	mod = ab::mod{};
 	mod.callback = std::bind_front(&ab::MainFrame::OnModuleActivated, this);
@@ -107,6 +110,7 @@ void ab::MainFrame::CreateModules()
 	mod.img = 1;
 	mod.id = mModules->mSales;
 	mModules->Add(std::move(mod));
+	gLogout.connect(std::bind_front(&ab::SaleView::OnLogOut, mSaleView));
 }
 
 void ab::MainFrame::CreateWorkspace()
@@ -283,6 +287,11 @@ void ab::MainFrame::CreateImageList()
 	mModules->SetImageList(mImageList);
 }
 
+void ab::MainFrame::ReloadFrame()
+{
+	mModules->ReloadAccountDetails();
+}
+
 void ab::MainFrame::OnWelcomePageSelect(wxListEvent& evt)
 {
 	int sel = evt.GetItem().GetId();
@@ -356,6 +365,16 @@ void ab::MainFrame::OnIdle(wxIdleEvent& evt)
 	default:
 		break;
 	}
+}
+
+void ab::MainFrame::OnLogOut(wxCommandEvent& evt)
+{
+	auto results = gLogout();
+	if (!std::all_of(results.begin(), results.end(), [](const bool b) -> bool { return b; })) {
+		return; //not all modules have agreed to log out
+	}
+
+	wxGetApp().SignOut();
 }
 
 void ab::MainFrame::OnModuleActivated(const ab::mod& mod, ab::module_evt evt)

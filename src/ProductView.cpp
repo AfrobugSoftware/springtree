@@ -8,6 +8,7 @@ BEGIN_EVENT_TABLE(ab::ProductView, wxPanel)
 	EVT_TOOL(ab::ProductView::ID_SELECT, ab::ProductView::OnSelect)
 	EVT_TOOL(ab::ProductView::ID_ADD_PRODUCT, ab::ProductView::OnAddProduct)
 	EVT_TOOL(ab::ProductView::ID_OPEN_INVOICES, ab::ProductView::OnInvoiceView)
+	EVT_TOOL(ab::ProductView::ID_REPORTS, ab::ProductView::OnReports)
 	EVT_AUITOOLBAR_TOOL_DROPDOWN(ab::ProductView::ID_FORMULARY, ab::ProductView::OnFormularyToolbar)
 	
 	//updates
@@ -185,6 +186,8 @@ void ab::ProductView::CreateBottomTool()
 	mFormularyTool->SetHasDropDown(true);
 	mBottomTool->AddSpacer(FromDIP(10));
 	mBottomTool->AddTool(ID_OPEN_INVOICES, "Invoices", wxArtProvider::GetBitmap("menu_book", wxART_OTHER, FromDIP(wxSize(16,16))), "Invoices");
+	mBottomTool->AddSpacer(FromDIP(10));
+	mBottomTool->AddTool(ID_REPORTS, "Reports", wxArtProvider::GetBitmap("list", wxART_OTHER, FromDIP(wxSize(16,16))), "Invoices");
 
 	mBottomTool->Realize();
 	mManager.AddPane(mBottomTool, wxAuiPaneInfo().Name("BottomToolBar").ToolbarPane().Top().MinSize(FromDIP(-1), FromDIP(30)).DockFixed().Row(2).LeftDockable(false).RightDockable(false).Floatable(false).BottomDockable(false));
@@ -261,6 +264,12 @@ void ab::ProductView::Clear()
 
 void ab::ProductView::LoadProducts(const grape::collection_type<grape::product>& products)
 {
+}
+
+bool ab::ProductView::OnLogout()
+{
+	//what to clean up here ?
+	return true;
 }
 
 void ab::ProductView::OnBack(wxCommandEvent& evt)
@@ -663,6 +672,11 @@ void ab::ProductView::OnInvoiceView(wxCommandEvent& evt)
 
 	mSupplierView->Suppliers();
 	mBook->SetSelection(SUPPLIER);
+}
+
+void ab::ProductView::OnReports(wxCommandEvent& evt)
+{
+
 }
 
 

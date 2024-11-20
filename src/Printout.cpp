@@ -2,9 +2,8 @@
 #include "Application.hpp"
 
 ab::Printout::Printout(wxPrintDialogData* data, const std::string& title)
-: wxPrintout(title){
+	: wxPrintout(title) {
     mPrintDialogData = data;
-    m_paper_type = static_cast<wxPaperSize>(wxGetApp().mPaperType);
     PerformPageSetup(wxGetApp().bShowPageSetup);
 }
 
@@ -85,7 +84,7 @@ void ab::Printout::PerformPageSetup(bool showSetup)
 		{
 
 			m_page_setup = dialog.GetPageSetupData();
-			wxGetApp().paperSize = m_page_setup.GetPrintData().GetPaperId();
+			wxGetApp().paperSize  = m_page_setup.GetPrintData().GetPaperId();
 
 			wxPoint marginTopLeft     = m_page_setup.GetMarginTopLeft();
 			wxPoint marginBottomRight = m_page_setup.GetMarginBottomRight();
@@ -196,15 +195,14 @@ size_t ab::Printout::WriteSaleData(double mToLogical, size_t y)
 	auto& cachefont = dc->GetFont();
 	dc->SetFont(wxGetApp().mReceiptFontSettings.GetChosenFont());
 
-	auto sales = saleView->GetCurrentModel();
-	if (!sales) throw std::runtime_error("failed to get current model");
-	for (auto& sale : *sales)
+	//change this to use the sale cache
+	for (auto& sale : mSaleCache)
 	{
 		auto& v = boost::fusion::at_c<2>(sale);
 
-		dc->DrawLabel(fmt::to_string(v[1].GetLong()), rect, wxALIGN_LEFT);
-		dc->DrawLabel(v[0].GetString(), rect, wxALIGN_CENTER);
-		dc->DrawLabel(v[4].GetString(), rect, wxALIGN_RIGHT);
+		dc->DrawLabel(fmt::to_string(sale.quantity), rect, wxALIGN_LEFT);
+		dc->DrawLabel(sale.name, rect, wxALIGN_CENTER);
+		dc->DrawLabel(fmt::format("{:cu}", sale.total), rect, wxALIGN_RIGHT);
 
 		yPos += lineHeight + 2;
 		rect.SetPosition(wxPoint(xPos + border, yPos + border));
@@ -333,13 +331,9 @@ size_t ab::Printout::WriteSaleDataSmall(double mToLogical, size_t y)
 	rect.SetPosition(wxPoint(xPos + border, yPos + border));
 
 	dc->SetFont(wxGetApp().mReceiptFontSettings.GetChosenFont());
-	auto sales = saleView->GetCurrentModel();
-	if (!sales) //what happends here 
-		throw std::system_error(std::make_error_code(std::errc::bad_address));
-	for (auto& sale : *sales) {
-		auto& v = boost::fusion::at_c<2>(sale);
-		auto productText = fmt::format("{:d} {}", v[1].GetLong(), v[0].GetString().ToStdString());
-		auto amountText = v[4].GetString().ToStdString();
+	for (auto& sale : mSaleCache) {
+		auto productText = fmt::format("{:d} {}", sale.quantity, sale.name);
+		auto amountText = fmt::format("{:cu}", sale.total);
 
 		dc->GetTextExtent(amountText, &xExtent, &yExtent);
 		int xSize = m_coord_system_width - xExtent - 10;
@@ -403,7 +397,7 @@ bool ab::Printout::DrawSalePrint()
 	//calculate the length of a line
 	int y = 0;
 
-	switch (m_paper_type)
+	switch (wxGetApp().paperSize)
 	{
 	case wxPAPER_NONE:
 		y = WritePageHeaderSmall(this, dc, app.mPharmacyManager.pharmacy.name, logUnitsFactor);

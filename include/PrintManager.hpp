@@ -5,6 +5,7 @@
 #include "Printout.h"
 #include <boost/signals2.hpp>
 
+#include <optional>
 namespace ab {
 	class PrintManager
 	{
@@ -21,7 +22,7 @@ namespace ab {
 		~PrintManager() = default;
 
 		void PrinterSetup();
-		void PrintReceipt(size_t type);
+		void PrintReceipt(size_t type, std::optional<std::vector<grape::sale_display>> sa = std::nullopt);
 		//void PrintLabels(const std::vector<pof::LabelInfo>& labels, wxWindow* parent);
 		void PrintJob(wxWindow* parent, wxPrintout* printjob);
 		void Preview(wxWindow* parent, wxPrintout* previeout, wxPrintout* printout);
