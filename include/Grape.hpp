@@ -509,6 +509,24 @@ BOOST_FUSION_DEFINE_STRUCT(
 	(std::string, username)
 )
 
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape), date_pack,
+	(std::uint32_t, dt)
+	(std::chrono::year_month_day, date)
+)
+
+BOOST_FUSION_DEFINE_STRUCT(
+	(grape), reports,
+	(boost::uuids::uuid, prod_id)
+	(boost::uuids::uuid, sale_id)
+	(std::chrono::system_clock::time_point, date)
+	(std::string, name)
+	(std::int64_t, quantity)
+	(pof::base::currency, price)
+	(pof::base::currency, cost)
+	(std::string, payment_type)
+)
+
 namespace grape {
 	template<typename T>
 		requires grape::FusionStruct<T>

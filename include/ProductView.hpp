@@ -30,6 +30,7 @@
 #include "AddProduct.hpp"
 #include "ProductInfo.hpp"
 #include "SupplierView.hpp"
+#include "Reports.hpp"
 
 namespace ab {
 	class ProductView : public wxPanel {
@@ -42,6 +43,7 @@ namespace ab {
 			VIEW,
 			INFO,
 			SUPPLIER,
+			REPORTS,
 		};
 
 		enum {
@@ -86,6 +88,7 @@ namespace ab {
 		void CreateBottomTool();
 		void CreateProductInfo();
 		void CreateSupplierView();
+		void CreateReportView();
 
 		void Load();
 		void Clear();
@@ -145,6 +148,7 @@ namespace ab {
 		//product info
 		ab::ProductInfo* mProductInfo = nullptr;
 		ab::SupplierView* mSupplierView = nullptr;
+		ab::Reports* mReport = nullptr;
 		//empty
 		wxPanel* mEmptyPanel = nullptr;
 		wxStaticText* mEmptyText = nullptr;

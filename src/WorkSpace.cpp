@@ -35,6 +35,7 @@ bool ab::Workspace::AddSpace(wxWindow* space, const std::string& name, int img)
 		if (!space->IsShown()) space->Show();
 		mWorkspacebook->SetSelection(pageidx);
 		notifsignal(ab::Workspace::notif::shown, space);
+		mWorkspacebook->Thaw();
 		return true;
 	}
 	auto ret = mWorkspacebook->AddPage(space, name, true, img);
